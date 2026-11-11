@@ -14,6 +14,25 @@ The Android app will package the Vue frontend; Railway runs only the Django API.
 
 If Railway reports that it detected npm and has no start command, deploy the latest commit: it contains the repository-root Dockerfile that prevents Railway from treating this project as an npm service.
 
+## Build the Android test app
+
+The Android package uses the existing Vue frontend through Capacitor. Ionic Vue UI components can be added later without rebuilding the screens first. The backend remains on Railway and the data remains in Neon.
+
+Before building, open `https://YOUR-RAILWAY-DOMAIN/api/v1/health/` and check that it returns `"status": "ok"`. The Android build uses the API address in `frontend/.env.android`; update that file if the Railway domain changes. The backend permits Capacitor's Android `http://localhost` origin.
+
+Install Android Studio and an Android SDK, then from `frontend/` run:
+
+```powershell
+npm install @capacitor/core @capacitor/android
+npm install -D @capacitor/cli
+npm run build:android
+npx cap add android
+npx cap sync android
+npx cap open android
+```
+
+In Android Studio, build an APK for testing and transfer the file to the phone through a download link or cloud drive. After changing Vue code or `frontend/.env.android`, run `npm run build:android` and `npx cap sync android` before building the next APK. The APK needs internet to reach the API. New account registration also needs the Railway SMTP variables documented above.
+
 ## Open locally
 
 From this workspace:
