@@ -1,0 +1,6 @@
+.env
+.env.local
+media/
+staticfiles/
+__pycache__/
+*.pyc

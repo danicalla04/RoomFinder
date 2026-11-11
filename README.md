@@ -2,6 +2,18 @@
 
 A hotel discovery and exact-room reservation application for Calapan City, Oriental Mindoro, built with Vue 3/Vite and Django REST Framework. It can use Neon PostgreSQL or the original local XAMPP MariaDB database. No real payment service is used.
 
+## Deploy the API on Railway
+
+The Android app will package the Vue frontend; Railway runs only the Django API.
+
+1. In Railway, create a service from this GitHub repository. In the service's **Settings**, set **Root Directory** to `/backend`. The Dockerfile in that folder installs the API dependencies, collects Django static files, and starts Gunicorn after migrations.
+2. In **Variables**, set `DATABASE_URL` to the Neon PostgreSQL connection URL, `SECRET_KEY` to a new random secret, and `ROOMFINDER_DEBUG=False`. Do not commit these values. For new account registration, also set `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL` so verification emails can be sent.
+3. In **Settings > Networking**, generate a public HTTPS domain. Railway supplies `RAILWAY_PUBLIC_DOMAIN`, which Django adds to its allowed hosts automatically. If using a custom domain, set `ROOMFINDER_ALLOWED_HOSTS` to that hostname and `ROOMFINDER_CSRF_TRUSTED_ORIGINS` to its HTTPS origin.
+4. Attach a Railway volume to the service at `/app/media` before uploading photos. Without the volume, uploaded hotel and room photos are lost when the service is replaced. Existing local photos are not copied to Railway automatically.
+5. Open `https://YOUR-RAILWAY-DOMAIN/api/v1/health/`. A successful response reports the connected database. When building the Android frontend, set `VITE_API_BASE_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/` and rebuild the Vue bundle.
+
+If Railway reports that it detected npm and has no start command, the service's Root Directory is still `/` instead of `/backend`.
+
 ## Open locally
 
 From this workspace:
