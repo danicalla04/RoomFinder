@@ -14,7 +14,12 @@ SECRET_KEY = os.getenv(
 DEBUG = os.getenv("ROOMFINDER_DEBUG", "True").lower() == "true"
 if not DEBUG and SECRET_KEY == "local-roomfinder-development-key-change-before-production":
     raise RuntimeError("Set SECRET_KEY before starting RoomFinder with DEBUG disabled")
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "testserver",
+    "roomfinder-production-4a6b51e9.up.railway.app",
+]
 ALLOWED_HOSTS += [
     host.strip()
     for host in os.getenv("ROOMFINDER_ALLOWED_HOSTS", "").split(",")

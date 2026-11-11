@@ -27,7 +27,12 @@ jobs:
           java-version: "21"
 
       - name: Check hosted API
-        run: curl --fail --silent --show-error --retry 3 --retry-delay 5 --output /dev/null https://roomfinder-production-4a6b51e9.up.railway.app/api/v1/health/
+        run: |
+          status=$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' https://roomfinder-production-4a6b51e9.up.railway.app/api/v1/health/)
+          echo "Hosted API HTTP status: $status"
+          if [ "$status" != "200" ]; then
+            echo "::warning::Hosted API returned HTTP $status. The APK can build, but its online features need a healthy backend."
+          fi
 
       - name: Install web and Capacitor dependencies
         working-directory: frontend
