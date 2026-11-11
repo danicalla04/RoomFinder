@@ -33,6 +33,8 @@ npx cap open android
 
 In Android Studio, build an APK for testing and transfer the file to the phone through a download link or cloud drive. After changing Vue code or `frontend/.env.android`, run `npm run build:android` and `npx cap sync android` before building the next APK. The APK needs internet to reach the API. New account registration also needs the Railway SMTP variables documented above.
 
+Alternatively, open the repository's **Actions** tab on GitHub, choose **Android test APK**, and run the workflow. It checks the hosted API, builds a debug APK with Capacitor, and uploads it as the **RoomFinder-Android-debug** artifact. Download the artifact ZIP, extract `app-debug.apk`, and install it on the Android phone. The APK does not need USB debugging or the development computer to stay on, but it does need the hosted API to remain available.
+
 ## Open locally
 
 From this workspace:

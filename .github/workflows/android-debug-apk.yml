@@ -1,0 +1,55 @@
+name: Android test APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-debug-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Check hosted API
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 5 --output /dev/null https://roomfinder-production-4a6b51e9.up.railway.app/api/v1/health/
+
+      - name: Install web and Capacitor dependencies
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm install @capacitor/core@^8 @capacitor/android@^8 --no-audit --no-fund
+          npm install --save-dev @capacitor/cli@^8 --no-audit --no-fund
+
+      - name: Build Vue for Android
+        working-directory: frontend
+        run: npm run build:android
+
+      - name: Create Android project
+        working-directory: frontend
+        run: npx cap add android
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: bash ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RoomFinder-Android-debug
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
