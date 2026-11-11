@@ -1,12 +1,16 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { api, errorMessage, money } from "../services/api";
 
 const route = useRoute();
+const router = useRouter();
 const overview = ref(null);
 const loading = ref(true);
 const error = ref("");
+const deletionName = ref("");
+const deleting = ref(false);
+const deletionError = ref("");
 const selectedFloorId = ref(null);
 const selectedRoomId = ref(null);
 const selectedFloor = computed(() => overview.value?.floors.find((floor) => floor.id === selectedFloorId.value));
@@ -36,6 +40,8 @@ async function load() {
   loading.value = true;
   error.value = "";
   overview.value = null;
+  deletionName.value = "";
+  deletionError.value = "";
   backToProperty();
   try {
     overview.value = (await api.get(`admin/hotels/${route.params.id}/`)).data;
@@ -43,6 +49,23 @@ async function load() {
     error.value = errorMessage(e);
   } finally {
     loading.value = false;
+  }
+}
+
+async function deleteHotel() {
+  if (!overview.value || deletionName.value !== overview.value.hotel.name || deleting.value) return;
+  deleting.value = true;
+  deletionError.value = "";
+  try {
+    await api.delete(`admin/hotels/${overview.value.hotel.id}/`, {
+      data: { confirm_name: deletionName.value },
+    });
+    sessionStorage.removeItem("rf_admin_users");
+    await router.push("/admin/users");
+  } catch (e) {
+    deletionError.value = errorMessage(e);
+  } finally {
+    deleting.value = false;
   }
 }
 
@@ -138,6 +161,20 @@ watch(() => route.params.id, load);
           </table>
         </div>
       </article>
+
+      <article class="panel delete-hotel-panel" v-if="!selectedFloorId">
+        <h2>Delete this hotel</h2>
+        <p>This permanently removes the hotel, its floors, rooms, reservations, payments, reviews, promotions, and photos. The owner and guest accounts remain.</p>
+        <p class="muted">Type <strong>{{ overview.hotel.name }}</strong> to confirm.</p>
+        <form @submit.prevent="deleteHotel">
+          <label for="delete-hotel-name">Hotel name</label>
+          <input id="delete-hotel-name" v-model="deletionName" autocomplete="off" />
+          <p v-if="deletionError" class="error" role="alert">{{ deletionError }}</p>
+          <button class="button delete-hotel-button" type="submit" :disabled="deleting || deletionName !== overview.hotel.name">
+            {{ deleting ? "Deleting..." : "Delete hotel and records" }}
+          </button>
+        </form>
+      </article>
     </template>
   </section>
 </template>
@@ -151,4 +188,10 @@ watch(() => route.params.id, load);
 .admin-room-photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
 .admin-room-photos figure { margin: 0; }
 .admin-room-photos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .6rem; }
+.delete-hotel-panel { border-color: #dfb6ad; margin-top: 1.5rem; }
+.delete-hotel-panel form { display: grid; gap: .75rem; max-width: 26rem; }
+.delete-hotel-panel input { width: 100%; }
+.delete-hotel-button { background: #a93d32; border-color: #a93d32; }
+.delete-hotel-button:hover { background: #842f27; }
+.delete-hotel-button:disabled { opacity: .5; cursor: not-allowed; }
 </style>

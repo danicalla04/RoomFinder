@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -12,13 +14,17 @@ from .serializers import (
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User
-from hotels.models import Hotel
+from hotels.models import Hotel, HotelPhoto
 from rooms.models import Floor, Room, RoomPhoto
 from bookings.models import Booking
+from payments.models import Payment
+from reviews.models import Review
 from django.shortcuts import get_object_or_404
 from .email_verification import verify_code, resend_wait_seconds, send_verification
 from .serializers import EmailDeliveryUnavailable
 from accounts.permissions import IsAdmin
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterView(CreateAPIView):
@@ -137,6 +143,35 @@ class ReviewOwnerView(APIView):
 
 class AdminHotelOverviewView(APIView):
     permission_classes = [IsAdmin]
+
+    def delete(self, request, pk):
+        with transaction.atomic():
+            hotel = get_object_or_404(Hotel.objects.select_for_update(), pk=pk)
+            if request.data.get("confirm_name") != hotel.name:
+                return Response({"detail": "Type the exact hotel name to confirm deletion."}, status=400)
+
+            hotel_photos = list(HotelPhoto.objects.filter(hotel=hotel).values_list("image", flat=True))
+            room_photos = list(RoomPhoto.objects.filter(room__floor__hotel=hotel).values_list("image", flat=True))
+            bookings = Booking.objects.filter(room__floor__hotel=hotel)
+            Review.objects.filter(booking__in=bookings).delete()
+            Payment.objects.filter(booking__in=bookings).delete()
+            bookings.delete()
+            Room.objects.filter(floor__hotel=hotel).delete()
+            Floor.objects.filter(hotel=hotel).delete()
+            hotel.delete()
+
+            def remove_photos():
+                for model, names in ((HotelPhoto, hotel_photos), (RoomPhoto, room_photos)):
+                    storage = model._meta.get_field("image").storage
+                    for name in set(names):
+                        if name:
+                            try:
+                                storage.delete(name)
+                            except Exception:
+                                logger.exception("Could not remove hotel photo file %s", name)
+
+            transaction.on_commit(remove_photos)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get(self, request, pk):
         hotel = get_object_or_404(Hotel.objects.select_related("owner"), pk=pk)

@@ -1,9 +1,17 @@
 from django.db import IntegrityError, transaction
+from django.test import override_settings
+from django.core.files.uploadedfile import SimpleUploadedFile
+from tempfile import TemporaryDirectory
+from pathlib import Path
 from rest_framework.test import APITestCase
 from bookings.tests import fixture
-from .models import Hotel
+from .models import Hotel, HotelPhoto
 from .location import CITY_NAME, PROVINCE_NAME
 from bookings.models import Booking
+from payments.models import Payment
+from reviews.models import Review
+from promotions.models import Promotion
+from rooms.models import Floor, Room, RoomPhoto
 from datetime import date, timedelta
 
 
@@ -73,6 +81,54 @@ class CalapanLocationTests(APITestCase):
         self.assertEqual(response.data["bookings"][0]["id"], booking.pk)
         self.assertEqual(response.data["bookings"][0]["room_id"], self.room.pk)
         self.assertEqual(response.data["bookings"][0]["customer__username"], self.customer.username)
+
+    def test_only_admin_can_delete_hotel_and_its_records(self):
+        booking = Booking.objects.create(
+            customer=self.customer, room=self.room,
+            check_in=date.today() + timedelta(days=2),
+            check_out=date.today() + timedelta(days=3), total=self.room.price,
+        )
+        payment = Payment.objects.create(booking=booking, amount=self.room.price)
+        review = Review.objects.create(booking=booking, rating=5, comment="Great stay")
+        promotion = Promotion.objects.create(
+            hotel=self.hotel, code="DELETE-TEST", percent=10,
+            starts_on=date.today(), ends_on=date.today() + timedelta(days=10),
+        )
+        other_hotel = Hotel.objects.create(
+            owner=self.owner, name="Keep this hotel", description="Still available",
+            city=CITY_NAME, address="Another street", latitude=13.4, longitude=121.18,
+        )
+        url = f"/api/v1/admin/hotels/{self.hotel.pk}/"
+        self.assertEqual(self.client.delete(url, {"confirm_name": self.hotel.name}, format="json").status_code, 403)
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.delete(url, {"confirm_name": "wrong"}, format="json").status_code, 400)
+        self.assertTrue(Hotel.objects.filter(pk=self.hotel.pk).exists())
+
+        with TemporaryDirectory() as media_dir, override_settings(MEDIA_ROOT=media_dir):
+            hotel_photo = HotelPhoto.objects.create(
+                hotel=self.hotel, image=SimpleUploadedFile("hotel.jpg", b"hotel image")
+            )
+            room_photo = RoomPhoto.objects.create(
+                room=self.room, image=SimpleUploadedFile("room.jpg", b"room image")
+            )
+            hotel_file = Path(media_dir) / hotel_photo.image.name
+            room_file = Path(media_dir) / room_photo.image.name
+            self.assertTrue(hotel_file.exists())
+            self.assertTrue(room_file.exists())
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.delete(url, {"confirm_name": self.hotel.name}, format="json")
+            self.assertEqual(response.status_code, 204, response.data)
+            self.assertFalse(hotel_file.exists())
+            self.assertFalse(room_file.exists())
+
+        for model, pk in (
+            (Hotel, self.hotel.pk), (Floor, self.floor.pk), (Room, self.room.pk),
+            (Booking, booking.pk), (Payment, payment.pk), (Review, review.pk),
+            (Promotion, promotion.pk),
+        ):
+            self.assertFalse(model.objects.filter(pk=pk).exists(), model.__name__)
+        self.assertTrue(Hotel.objects.filter(pk=other_hotel.pk).exists())
+        self.assertEqual(self.client.get(url).status_code, 404)
 
     def test_owner_and_admin_cannot_create_outside_calapan(self):
         for user in [self.owner, self.admin]:
