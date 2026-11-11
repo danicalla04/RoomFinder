@@ -1,0 +1,11 @@
+# Test suites
+
+`../scripts/test.ps1` runs the MySQL-backed Django suite and the production Vue build. Add `-Browser` after starting the local servers to run headless Edge workflows. The browser test code lives in frontend/e2e so Node resolves the project-local Playwright dependencies. Database tests live in backend/accounts/tests.py, backend/hotels/tests.py, backend/rooms/tests.py and backend/bookings/tests.py to use Django test discovery and isolated test databases.
+
+The database suite creates and destroys test_roomfinder_db, never the development database. It covers authentication, authorization, hotel verification, CRUD, protected history, dates, capacity, price tampering, overlap (including boundary dates), concurrent reservations using two MySQL connections, atomic rollback, refunds, promotion expiry, date availability, nearby search, report scope/CSV, private notifications, verified-stay reviews, and stored image uploads.
+
+Browser tests use seeded demo accounts and the real local API. They exercise discovery, filters, comparison, map markers, mobile overflow, exact-room selection, payment confirmation, cancellation/refund, notifications, owner dashboard, hotel/floor/room creation, administrator verification, promotion creation, both photo upload forms, and CSV downloads. Browser-created hotels/floors/rooms are removed after successful runs; an afterEach cleanup also attempts removal if a workflow fails; cancelled reservations intentionally remain as history. Screenshots: .local/screenshots. Failure artifacts: .local/test-results. Edge is used through Playwright channel msedge; install Edge or change playwright.config.js to an available browser.
+
+The Calapan suite checks fixed destination and local listings across all roles, rejected outside-city creates/updates, the database city constraint, and city/province reporting. Browser tests also check owner/admin location fields and the Calapan map.
+
+Room/activity tests cover date-specific booked/unavailable states, protected deletion eligibility, marking a room unavailable, seed idempotency and non-overlap, populated report trends, and unusable demo-account passwords. Browser checks cover the narrow owner room actions/editor deletion, real demo chart activity, modern vector map styles, Google Maps links and explicit fallback when vector tiles are blocked.

@@ -1,0 +1,555 @@
+{
+  "info": {
+    "name": "RoomFinder API v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/register/",
+            "description": "Register customer",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newtraveler\",\n  \"email\": \"newtraveler@example.test\",\n  \"password\": \"UniqueTraveler!2026\",\n  \"role\": \"customer\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register hotel owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/register/",
+            "description": "Register hotel owner",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newowner\",\n  \"email\": \"newowner@example.test\",\n  \"password\": \"UniqueOwner!2026\",\n  \"role\": \"owner\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Log in (set username for role)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/token/",
+            "description": "Log in (set username for role)",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===200){const d=pm.response.json();pm.environment.set('access_token',d.access);pm.environment.set('refresh_token',d.refresh);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/token/refresh/",
+            "description": "Refresh",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===200)pm.environment.set('access_token',pm.response.json().access);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/auth/me/",
+            "description": "My profile"
+          }
+        },
+        {
+          "name": "Edit profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/me/",
+            "description": "Edit profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+639171234567\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Discovery and verification",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/health/",
+            "description": "Health",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Search available hotels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/hotels/?city=Calapan%20City&search=&check_in={{check_in}}&check_out={{check_out}}&guests=2&max_price=8000&sort=price",
+            "description": "Search available hotels",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Nearby hotels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/hotels/nearby/?lat=13.4&lng=121.183333&radius=100",
+            "description": "Nearby hotels",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Hotel details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/hotels/{{hotel_id}}/",
+            "description": "Hotel details",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create hotel (owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hotels/",
+            "description": "Create hotel (owner)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My RoomFinder Hotel\",\n  \"description\": \"A comfortable garden stay.\",\n  \"city\": \"Calapan City\",\n  \"address\": \"Sample Garden Road, Calapan City, Oriental Mindoro\",\n  \"latitude\": \"13.400000\",\n  \"longitude\": \"121.183333\",\n  \"stars\": 4,\n  \"amenities\": [\n    \"Wi-Fi\",\n    \"Pool\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('hotel_id',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify hotel (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hotels/{{hotel_id}}/verify/",
+            "description": "Verify hotel (admin)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"verified\",\n  \"note\": \"Property details reviewed.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Floors and rooms",
+      "item": [
+        {
+          "name": "List floors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/floors/?hotel={{hotel_id}}",
+            "description": "List floors",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create floor (owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/floors/",
+            "description": "Create floor (owner)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hotel\": \"{{hotel_id}}\",\n  \"number\": 3,\n  \"name\": \"Garden floor\",\n  \"columns\": 6\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('floor_id',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List date availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/rooms/?hotel={{hotel_id}}&check_in={{check_in}}&check_out={{check_out}}",
+            "description": "List date availability",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create room (owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/rooms/",
+            "description": "Create room (owner)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"floor\": \"{{floor_id}}\",\n  \"number\": \"301\",\n  \"price\": \"2500.00\",\n  \"capacity\": 2,\n  \"row\": 0,\n  \"column\": 0,\n  \"kind\": \"Deluxe\",\n  \"beds\": \"1 queen bed\",\n  \"area\": 28,\n  \"active\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('room_id',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update room price (owner)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/rooms/{{room_id}}/",
+            "description": "Update room price (owner)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"2750.00\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservations and simulated payments",
+      "item": [
+        {
+          "name": "Reserve and automatically approve simulated payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/bookings/",
+            "description": "Reserve and automatically approve simulated payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room\": \"{{room_id}}\",\n  \"check_in\": \"{{check_in}}\",\n  \"check_out\": \"{{check_out}}\",\n  \"guests\": 2,\n  \"special_requests\": \"Quiet room, please.\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('booking_id',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List authorized bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/bookings/",
+            "description": "List authorized bookings"
+          }
+        },
+        {
+          "name": "Booking confirmation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/bookings/{{booking_id}}/",
+            "description": "Booking confirmation"
+          }
+        },
+        {
+          "name": "Cancel and simulate refund",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/bookings/{{booking_id}}/cancel/",
+            "description": "Cancel and simulate refund",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "List simulated payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payments/",
+            "description": "List simulated payments"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Promotions and reviews",
+      "item": [
+        {
+          "name": "List current promotions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/promotions/?hotel={{hotel_id}}",
+            "description": "List current promotions",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create promotion (owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/promotions/",
+            "description": "Create promotion (owner)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hotel\": \"{{hotel_id}}\",\n  \"code\": \"WELCOME15\",\n  \"percent\": 15,\n  \"starts_on\": \"2026-10-16\",\n  \"ends_on\": \"2027-10-16\",\n  \"active\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Hotel reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reviews/?hotel={{hotel_id}}",
+            "description": "Hotel reviews",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Review completed reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/reviews/",
+            "description": "Review completed reservation",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"booking\": \"{{booking_id}}\",\n  \"rating\": 5,\n  \"comment\": \"A comfortable stay and welcoming team.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications and reports",
+      "item": [
+        {
+          "name": "My notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/notifications/",
+            "description": "My notifications"
+          }
+        },
+        {
+          "name": "Mark all read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/notifications/read_all/",
+            "description": "Mark all read",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Dashboard report (owner/admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/summary/",
+            "description": "Dashboard report (owner/admin)"
+          }
+        },
+        {
+          "name": "CSV report (owner/admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/summary/?format=csv",
+            "description": "CSV report (owner/admin)"
+          }
+        }
+      ]
+    }
+  ]
+}
