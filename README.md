@@ -18,7 +18,7 @@ If Railway reports that it detected npm and has no start command, deploy the lat
 
 The Android package uses the existing Vue frontend through Capacitor. Ionic Vue UI components can be added later without rebuilding the screens first. The backend remains on Railway and the data remains in Neon.
 
-Before building, open `https://YOUR-RAILWAY-DOMAIN/api/v1/health/` and check that it returns `"status": "ok"`. The Android build uses the API address in `frontend/.env.android`; update that file if the Railway domain changes. The backend permits Capacitor's Android `http://localhost` origin.
+Before building, open `https://YOUR-RAILWAY-DOMAIN/api/v1/health/` and check that it returns `"status": "ok"`. The Android build uses the API address in `frontend/.env.android`; update that file if the Railway domain changes. The backend permits Capacitor's Android `https://localhost` origin.
 
 Install Android Studio and an Android SDK, then from `frontend/` run:
 

@@ -27,7 +27,7 @@ jobs:
       - name: Check Android login preflight
         run: |
           curl --silent --show-error --max-time 30 --request OPTIONS \
-            --header 'Origin: http://localhost' \
+            --header 'Origin: https://localhost' \
             --header 'Access-Control-Request-Method: POST' \
             --dump-header headers.txt --output body.txt \
             https://roomfinder-production-4a6b51e9.up.railway.app/api/v1/auth/token/
