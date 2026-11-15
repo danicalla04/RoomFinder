@@ -42,6 +42,23 @@ class CalapanLocationTests(APITestCase):
         response = self.client.post("/api/v1/hotels/", self.payload(), format="json")
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data["city"], CITY_NAME)
+
+    def test_property_rating_comes_from_guest_reviews_only(self):
+        url = f"/api/v1/hotels/{self.hotel.pk}/"
+        response = self.client.get(url)
+        self.assertIsNone(response.data["rating"])
+        self.assertEqual(response.data["review_count"], 0)
+        self.assertNotIn("stars", response.data)
+
+        booking = Booking.objects.create(
+            customer=self.customer, room=self.room,
+            check_in=date.today() - timedelta(days=2),
+            check_out=date.today() - timedelta(days=1), total=self.room.price,
+        )
+        Review.objects.create(booking=booking, rating=4, comment="Good stay")
+        response = self.client.get(url)
+        self.assertEqual(response.data["rating"], 4)
+        self.assertEqual(response.data["review_count"], 1)
         self.assertEqual(Hotel.objects.get(pk=response.data["id"]).city, CITY_NAME)
 
     def test_pending_owner_cannot_create_hotel(self):

@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import sys
+from email.utils import formataddr, parseaddr
 from urllib.parse import parse_qs, unquote, urlparse
 from dotenv import load_dotenv
 
@@ -134,7 +135,11 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
-    "DEFAULT_THROTTLE_RATES": {"anon": "120/min", "user": "600/min"},
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "120/min",
+        "user": "600/min",
+        "navigation": "20/min",
+    },
 }
 from datetime import timedelta
 
@@ -175,7 +180,13 @@ EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "90"))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
+ORS_API_KEY = os.getenv("ORS_API_KEY", "")
+configured_from_email = os.getenv("DEFAULT_FROM_EMAIL", "").strip() or EMAIL_HOST_USER
+_, sender_email_address = parseaddr(configured_from_email)
+if not sender_email_address:
+    sender_email_address = EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = formataddr(("RoomFinder", sender_email_address))
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 ROOMFINDER_PUBLIC_URL = os.getenv("ROOMFINDER_PUBLIC_URL", "http://localhost:5173")
 
 REST_FRAMEWORK["URL_FORMAT_OVERRIDE"] = None

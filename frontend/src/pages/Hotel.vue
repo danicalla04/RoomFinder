@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   MapPin,
@@ -19,6 +19,8 @@ import {
 import { api, errorMessage, money, today, nextDay } from "../services/api";
 import { useAuth } from "../stores/auth";
 import HotelMap from "../components/HotelMap.vue";
+import HotelNavigation from "../components/HotelNavigation.vue";
+import FloorPlanEditor from "../components/FloorPlanEditor.vue";
 const route = useRoute(),
   router = useRouter(),
   auth = useAuth(),
@@ -33,8 +35,11 @@ const route = useRoute(),
   busy = ref(false),
   loading = ref(true),
   photoIndex = ref(0),
+  roomView = ref("photos"),
   showMap = ref(false),
-  confirmed = ref(null);
+  showNavigation = ref(false),
+  confirmed = ref(null),
+  depositPrompt = ref(false);
 const form = ref({
   check_in: route.query.check_in || today(),
   check_out: route.query.check_out || nextDay(today()),
@@ -89,26 +94,21 @@ const floor = computed(() => floors.value.find((f) => f.id === floorId.value)),
   total = computed(
     () => subtotal.value * (1 - (promo.value?.percent || 0) / 100),
   );
+const depositDue = computed(() => total.value * 0.5);
 const gallery = computed(() =>
   [
     ...(hotel.value?.photos || []),
     ...rooms.value.flatMap((r) => r.photos),
   ].filter((p, i, a) => a.findIndex((x) => x.image === p.image) === i),
 );
-const gridSlots = computed(() => {
-  if (!floor.value) return [];
-  const count =
-    Math.max(2, ...floorRooms.value.map((r) => r.row + 1)) *
-    floor.value.columns;
-  return Array.from({ length: count }, (_, i) =>
-    floorRooms.value.find(
-      (r) =>
-        r.row === Math.floor(i / floor.value.columns) &&
-        r.column === i % floor.value.columns,
-    ),
-  );
-});
+let availabilityTimer = null;
+let availabilityRequest = 0;
 async function refreshRooms() {
+  if (availabilityTimer) {
+    clearTimeout(availabilityTimer);
+    availabilityTimer = null;
+  }
+  const requestId = ++availabilityRequest;
   error.value = "";
   selected.value = null;
   checkingRooms.value = true;
@@ -117,19 +117,19 @@ async function refreshRooms() {
     check_out: form.value.check_out,
   };
   try {
-    rooms.value = (
-      await api.get("rooms/", {
-        params: {
-          hotel: route.params.id,
-          ...period,
-        },
-      })
-    ).data;
+    const { data } = await api.get("rooms/", {
+      params: {
+        hotel: route.params.id,
+        ...period,
+      },
+    });
+    if (requestId !== availabilityRequest) return;
+    rooms.value = data;
     appliedDates.value = period;
   } catch (e) {
-    error.value = errorMessage(e);
+    if (requestId === availabilityRequest) error.value = errorMessage(e);
   } finally {
-    checkingRooms.value = false;
+    if (requestId === availabilityRequest) checkingRooms.value = false;
   }
 }
 async function load() {
@@ -182,6 +182,17 @@ async function reserve() {
     busy.value = false;
   }
 }
+function beginBooking() {
+  if (!auth.user) {
+    router.push({ path: "/login", query: { next: route.fullPath } });
+    return;
+  }
+  depositPrompt.value = true;
+}
+async function continueBooking() {
+  depositPrompt.value = false;
+  await reserve();
+}
 async function refreshRoomsKeepError() {
   const previous = error.value;
   await refreshRooms();
@@ -195,11 +206,25 @@ watch(
 );
 watch(
   () => [form.value.check_in, form.value.check_out],
-  () => {
+  ([checkIn, checkOut]) => {
     selected.value = null;
+    if (availabilityTimer) clearTimeout(availabilityTimer);
+    if (!checkIn || !checkOut) return;
+    if (checkOut <= checkIn) {
+      form.value.check_out = nextDay(checkIn);
+      return;
+    }
+    availabilityTimer = setTimeout(() => {
+      availabilityTimer = null;
+      refreshRooms();
+    }, 300);
   },
 );
 onMounted(load);
+onBeforeUnmount(() => {
+  if (availabilityTimer) clearTimeout(availabilityTimer);
+  availabilityRequest += 1;
+});
 </script>
 <template>
   <section class="section page" v-if="loading">
@@ -211,29 +236,26 @@ onMounted(load);
     >
     <div class="hotel-title">
       <div>
-        <span class="eyebrow"
-          >{{ hotel.stars }}-STAR CATEGORY ·
-          {{ hotel.city.toUpperCase() }}</span
-        >
+        <span class="eyebrow">{{ hotel.city.toUpperCase() }}</span>
         <h1>{{ hotel.name }}</h1>
         <p>
           <MapPin :size="16" />{{ hotel.address }}, {{ hotel.city }}
           <button class="text-button" @click="showMap = !showMap">
             {{ showMap ? "Hide map" : "View map" }}
           </button>
+          <button class="text-button hotel-directions-button" @click="showNavigation = !showNavigation">
+            {{ showNavigation ? "Close directions" : "Follow directions" }}
+          </button>
         </p>
       </div>
       <span class="rating large"
         ><Star fill="currentColor" :size="20" />{{
           hotel.rating ? Number(hotel.rating).toFixed(1) : "New"
-        }}<small>{{ hotel.review_count }} reviews</small></span
+        }}<small>{{ hotel.review_count ? `${hotel.review_count} reviews` : "No reviews yet" }}</small></span
       >
     </div>
-    <p class="classification-note">
-      Property stars are an owner-provided category, not official accreditation.
-      Guest ratings come from completed-stay reviews.
-    </p>
     <HotelMap v-if="showMap" :hotels="[hotel]" />
+    <HotelNavigation v-if="showNavigation" :hotel="hotel" @close="showNavigation = false" />
     <div v-if="gallery.length" class="gallery">
       <img
         :src="gallery[photoIndex % gallery.length].image"
@@ -297,14 +319,13 @@ onMounted(load);
               required /></label
           ><button class="button small">Check availability</button>
         </form>
-        <p v-if="datesDirty" class="info-note">
-          Dates changed. Check availability to refresh the room plan.
-        </p>
         <p class="muted">
-          Availability is for {{ appliedDates?.check_in || form.check_in }} ·
-          {{ appliedDates?.check_out || form.check_out }}. Update dates, then
-          check availability.
+          Availability is for {{ form.check_in }} · {{ form.check_out }}.
         </p>
+        <div class="room-view-switch" role="group" aria-label="Choose how to view rooms">
+          <button type="button" :class="{ active: roomView === 'photos' }" :aria-pressed="roomView === 'photos'" @click="roomView = 'photos'">Room photos</button>
+          <button type="button" :class="{ active: roomView === 'layout' }" :aria-pressed="roomView === 'layout'" @click="roomView = 'layout'">Floor layout</button>
+        </div>
         <div class="floor-tabs">
           <button
             v-for="f in floors"
@@ -314,7 +335,33 @@ onMounted(load);
             {{ f.name }} <small>Floor {{ f.number }}</small>
           </button>
         </div>
-        <div v-if="floor" class="floor-plan">
+        <div v-if="datesDirty || checkingRooms" class="availability-refreshing" role="status">
+          <span class="eyebrow">UPDATING ROOM AVAILABILITY</span>
+          <p v-if="form.check_in && form.check_out">Checking rooms for {{ form.check_in }} · {{ form.check_out }}…</p>
+          <p v-else>Choose both dates to check room availability.</p>
+        </div>
+        <div v-else-if="floor && roomView === 'photos'" class="room-photo-grid">
+          <button
+            v-for="room in floorRooms" :key="room.id" type="button"
+            class="room-photo-card" :class="{ chosen: selected?.id === room.id, disabled: roomState(room) !== 'available' && roomState(room) !== 'selected' }"
+            :disabled="datesDirty || checkingRooms || (roomState(room) !== 'available' && roomState(room) !== 'selected')"
+            @click="selectRoom(room)"
+          >
+            <div class="room-photo-card-image">
+              <img v-if="room.photos?.length" :src="room.photos[0].image" :alt="`Room ${room.number}`" loading="lazy" />
+              <span v-else class="room-photo-placeholder"><BedDouble :size="36" />Photo coming soon</span>
+              <span class="room-photo-status" :class="roomState(room)">{{ roomLabel(room) }}</span>
+            </div>
+            <div class="room-photo-card-body">
+              <span class="eyebrow">ROOM {{ room.number }}</span>
+              <h3>{{ room.kind }}</h3>
+              <p>{{ room.beds }} · {{ room.capacity }} guests · {{ room.area }} m²</p>
+              <strong>{{ money(room.price) }} <small>/ night</small></strong>
+            </div>
+          </button>
+          <p v-if="!floorRooms.length" class="empty">No rooms are listed on this floor yet.</p>
+        </div>
+        <div v-else-if="floor" class="floor-plan">
           <div class="room-status-summary">
             <span
               >{{
@@ -337,33 +384,11 @@ onMounted(load);
               unavailable</span
             >
           </div>
-          <div class="floor-screen">
-            {{ hotel.name }} · {{ floor.name }} · Windows & view
-          </div>
-          <div class="room-grid" :style="{ '--columns': floor.columns }">
-            <template v-for="(room, i) in gridSlots" :key="i"
-              ><button
-                v-if="room"
-                :class="['room-seat', roomState(room)]"
-                :data-state="roomState(room)"
-                :disabled="
-                  !room.available ||
-                  room.capacity < form.guests ||
-                  checkingRooms ||
-                  datesDirty
-                "
-                @click="selectRoom(room)"
-                :aria-label="`Room ${room.number}, ${room.kind}, ${money(room.price)} per night, ${roomLabel(room)}`"
-                :title="`${roomLabel(room)} for the displayed dates`"
-              >
-                <BedDouble :size="21" /><strong>{{ room.number }}</strong
-                ><small>{{ money(room.price) }}</small
-                ><span class="room-state-text">{{ roomLabel(room) }}</span>
-              </button>
-              <div v-else class="room-gap"></div
-            ></template>
-          </div>
-          <div class="hallway">HALLWAY &nbsp; · &nbsp; LIFT / STAIRS</div>
+          <FloorPlanEditor
+            :key="floor.id" :floor="floor" :rooms="floorRooms" readonly
+            :selected-room-id="selected?.id || null" :room-state="roomState" :room-label="roomLabel"
+            @select-room="selectRoom"
+          />
           <div class="legend">
             <span><i></i>Available</span
             ><span><i class="picked"></i>Your choice</span
@@ -373,33 +398,26 @@ onMounted(load);
           </div>
         </div>
         <p v-else class="empty">This property has no rooms listed yet.</p>
-        <article v-if="selected" class="selected-room">
-          <img
-            v-if="selected.photos.length"
-            :src="selected.photos[0].image"
-            :alt="`Room ${selected.number}`"
-          />
-          <div>
-            <span class="eyebrow">YOUR SELECTED ROOM</span>
-            <h3>{{ selected.kind }} · Room {{ selected.number }}</h3>
-            <p>{{ selected.description }}</p>
-            <div class="room-facts">
-              <span><BedDouble :size="16" />{{ selected.beds }}</span
-              ><span><Users :size="16" />{{ selected.capacity }} guests</span
-              ><span><Maximize :size="16" />{{ selected.area }} m²</span>
-            </div>
-          </div>
-        </article>
       </div>
       <aside class="reservation-panel">
         <span class="eyebrow">YOUR NEXT CHAPTER</span>
         <h3>{{ selected ? "Make it yours." : "Your room is waiting." }}</h3>
         <p v-if="!selected">
-          Choose an available room on the floor plan to see your reservation
-          details.
+          Choose an available room from the photos or floor layout to see your reservation details.
         </p>
         <template v-else
-          ><div class="price-head">
+          ><div class="reservation-room-photo">
+            <img v-if="selected.photos?.length" :src="selected.photos[0].image" :alt="`Selected room ${selected.number}`" />
+            <div v-else class="room-photo-placeholder"><BedDouble :size="32" />Photo coming soon</div>
+            <span>ROOM {{ selected.number }} · {{ selected.kind }}</span>
+          </div>
+          <p class="reservation-room-description">{{ selected.description }}</p>
+          <div class="room-facts">
+            <span><BedDouble :size="16" />{{ selected.beds }}</span>
+            <span><Users :size="16" />{{ selected.capacity }} guests</span>
+            <span><Maximize :size="16" />{{ selected.area }} m²</span>
+          </div>
+          <div class="price-head">
             {{ money(selected.price) }}<small> / night</small>
           </div>
           <div class="receipt-line">
@@ -436,34 +454,25 @@ onMounted(load);
               placeholder="Anything we should know?"
             ></textarea>
           </label>
-          <div class="simulation-note">
-            <ShieldCheck :size="18" /><span
-              >Simulated payment only.<small
-                >No card details. No real charges.</small
-              ></span
-            >
-          </div>
           <button
             class="button full"
-            @click="reserve"
+            @click="beginBooking"
             :disabled="
               busy || nights < 1 || (auth.user && auth.user.role !== 'customer')
             "
           >
             {{
               busy
-                ? "Confirming..."
+                ? "Sending request..."
                 : auth.user
-                  ? "Reserve & simulate payment"
+                  ? "Request booking"
                   : "Sign in to reserve"
             }}<ArrowRight :size="17" />
           </button>
           <p v-if="auth.user && auth.user.role !== 'customer'" class="muted">
             A customer account is required to reserve.
           </p>
-          <small class="muted"
-            >Free cancellation before check-in day.</small
-          ></template
+          <small class="muted">The owner must approve your booking. You may cancel within two hours of requesting it, before check-in day.</small></template
         >
         <p v-if="error" role="alert" class="error">{{ error }}</p>
       </aside>
@@ -488,23 +497,32 @@ onMounted(load);
         </p>
       </div>
     </div>
+    <div v-if="depositPrompt" class="modal-backdrop">
+      <section class="modal confirmation" role="dialog" aria-modal="true" aria-label="Booking deposit information">
+        <span class="success-icon"><ShieldCheck :size="32" /></span>
+        <span class="eyebrow">DEPOSIT INFORMATION</span>
+        <h2>A 50% deposit is requested.</h2>
+        <p>Deposit amount: <strong>{{ money(depositDue) }}</strong></p>
+        <p>Booking total: {{ money(total) }}</p>
+        <p class="muted">RoomFinder does not collect or verify payments in this app. Arrange the deposit directly with the hotel owner before proceeding. The owner handles any eligible refund under the hotel's cancellation policy.</p>
+        <button class="button full" :disabled="busy" @click="continueBooking">Continue with booking request <ArrowRight :size="17" /></button>
+        <button class="text-button" :disabled="busy" @click="depositPrompt = false">Go back</button>
+      </section>
+    </div>
     <div v-if="confirmed" class="modal-backdrop">
       <section
         class="modal confirmation"
         role="dialog"
         aria-modal="true"
-        aria-label="Reservation confirmed"
+        aria-label="Booking request submitted"
       >
         <span class="success-icon"><Check :size="34" /></span
         ><span class="eyebrow">YOU'RE GOING SOMEWHERE</span>
-        <h2>Your stay is confirmed.</h2>
+        <h2>Request sent to the owner.</h2>
+        <p>Your booking is pending approval.</p>
         <p>{{ confirmed.hotel_name }} · Room {{ confirmed.room_number }}</p>
         <p>{{ confirmed.check_in }} · {{ confirmed.check_out }}</p>
         <p class="reference">{{ confirmed.reference }}</p>
-        <div class="receipt-line">
-          <span>Simulated payment approved</span
-          ><strong>{{ money(confirmed.total) }}</strong>
-        </div>
         <RouterLink to="/bookings" class="button full"
           >View my reservation <ArrowRight :size="17" /></RouterLink
         ><button class="text-button" @click="confirmed = null">

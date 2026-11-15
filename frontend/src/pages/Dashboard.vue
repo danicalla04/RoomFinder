@@ -1,9 +1,10 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { Chart, registerables } from "chart.js";
 import { api, errorMessage, money } from "../services/api";
 import { LOCATION_LABEL } from "../services/location";
 import { useAuth } from "../stores/auth";
+import BookingChat from "../components/BookingChat.vue";
 import {
   Building2,
   BedDouble,
@@ -13,6 +14,8 @@ import {
   ArrowUpRight,
   Check,
   X,
+  MessageCircle,
+  RotateCcw,
 } from "lucide-vue-next";
 Chart.register(...registerables);
 const auth = useAuth(),
@@ -23,7 +26,12 @@ const auth = useAuth(),
   loading = ref(true),
   canvas = ref(),
   busy = ref(false),
-  note = ref("");
+  note = ref(""),
+  bookingAction = ref(null),
+  actionNotice = ref("");
+const chatBooking = ref(null);
+const pendingBookings = computed(() => bookings.value.filter((b) => b.status === "pending"));
+const cancellationRequests = computed(() => bookings.value.filter((b) => b.cancellation_requested));
 let chart;
 async function load() {
   try {
@@ -46,7 +54,7 @@ async function load() {
           labels: r.data.trend.map((d) => d.date.slice(5)),
           datasets: [
             {
-              label: "Simulated revenue (PHP)",
+              label: "Booking value (PHP)",
               data: r.data.trend.map((d) => Number(d.revenue)),
               backgroundColor: "#1f5c4d",
               borderRadius: 5,
@@ -105,6 +113,37 @@ async function verify(h, status) {
     busy.value = false;
   }
 }
+async function confirmBookingAction() {
+  if (!bookingAction.value) return;
+  busy.value = true;
+  error.value = "";
+  actionNotice.value = "";
+  const { booking, action } = bookingAction.value;
+  try {
+    if (action.startsWith("cancel_")) {
+      const decision = action === "cancel_approved" ? "approved" : "rejected";
+      await api.post(`bookings/${booking.id}/cancel_decision/`, { decision });
+      actionNotice.value = decision === "approved"
+        ? "Cancellation approved. Contact the guest about any refund."
+        : "Cancellation request declined.";
+    } else {
+      const refundConfirmed = action === "rejected_refund";
+      await api.post(`bookings/${booking.id}/decision/`, {
+        decision: refundConfirmed ? "rejected" : action,
+        refund_confirmed: refundConfirmed,
+      });
+      actionNotice.value = refundConfirmed
+        ? "Booking rejected. The manual refund was recorded."
+        : `Booking ${action}.`;
+    }
+    bookingAction.value = null;
+    await load();
+  } catch (e) {
+    error.value = errorMessage(e);
+  } finally {
+    busy.value = false;
+  }
+}
 async function download() {
   try {
     const { data } = await api.get("reports/summary/", {
@@ -146,6 +185,7 @@ onBeforeUnmount(() => chart?.destroy());
       </button>
     </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <p v-if="actionNotice" class="success" role="status">{{ actionNotice }}</p>
     <p v-if="loading">Gathering your latest numbers...</p>
     <template v-if="report"
       ><div class="stats-grid">
@@ -165,7 +205,7 @@ onBeforeUnmount(() => chart?.destroy());
           ><small>{{ report.confirmed_count }} confirmed</small>
         </article>
         <article>
-          <TrendingUp :size="21" /><span>Simulated revenue</span
+          <TrendingUp :size="21" /><span>Confirmed booking value</span
           ><strong>{{ money(report.revenue) }}</strong
           ><small>Confirmed reservations · all time</small>
         </article>
@@ -174,12 +214,12 @@ onBeforeUnmount(() => chart?.destroy());
         <article class="panel">
           <div class="section-heading">
             <h3>A week in perspective</h3>
-            <span class="muted">Simulated revenue</span>
+            <span class="muted">Booking value</span>
           </div>
           <div class="chart-wrap">
             <canvas
               ref="canvas"
-              aria-label="Revenue and reservations over the last seven days"
+              aria-label="Booking value and reservation counts over the last seven days"
             ></canvas>
           </div>
         </article>
@@ -202,6 +242,28 @@ onBeforeUnmount(() => chart?.destroy());
           /></RouterLink>
         </article></div
     ></template>
+    <section v-if="auth.user.role === 'owner'" class="owner-booking-queue">
+      <article class="panel">
+        <span class="eyebrow">ACTION NEEDED</span>
+        <h2>Booking requests <small>({{ pendingBookings.length }})</small></h2>
+        <p class="muted">A room stays reserved while you review the guest's request.</p>
+        <div v-for="b in pendingBookings" :key="b.id" class="booking-action-row">
+          <div><strong>{{ b.customer_display_name }}</strong><p>{{ b.hotel_name }} · Room {{ b.room_number }} · {{ b.check_in }} to {{ b.check_out }}</p><small>{{ b.guests }} guest{{ b.guests === 1 ? '' : 's' }} · {{ money(b.total) }} total</small><p v-if="b.special_requests" class="booking-special-request"><strong>Special request:</strong> {{ b.special_requests }}</p></div>
+          <div class="booking-action-buttons"><button class="text-button" @click="chatBooking = b"><MessageCircle :size="16" />Message guest</button><button class="button small" :disabled="busy" @click="bookingAction = { booking: b, action: 'approved' }"><Check :size="15" />Approve</button><button class="button secondary small" :disabled="busy" @click="bookingAction = { booking: b, action: 'rejected' }"><X :size="15" />Reject</button><button class="text-button danger" :disabled="busy" @click="bookingAction = { booking: b, action: 'rejected_refund' }"><RotateCcw :size="15" />Reject &amp; refund</button></div>
+        </div>
+        <p v-if="!pendingBookings.length" class="muted">No booking requests are waiting.</p>
+      </article>
+    </section>
+    <section v-if="auth.user.role === 'owner' && cancellationRequests.length" class="owner-booking-queue">
+      <article class="panel">
+        <span class="eyebrow">GUEST REQUESTS</span>
+        <h2>Cancellation requests <small>({{ cancellationRequests.length }})</small></h2>
+        <div v-for="b in cancellationRequests" :key="`cancel-${b.id}`" class="booking-action-row">
+          <div><strong>{{ b.customer_display_name }}</strong><p>{{ b.hotel_name }} · Room {{ b.room_number }} · {{ b.check_in }} to {{ b.check_out }}</p><small>{{ money(b.total) }} total · Guest requests cancellation</small></div>
+          <div class="booking-action-buttons"><button class="button small" :disabled="busy" @click="bookingAction = { booking: b, action: 'cancel_approved' }"><Check :size="15" />Approve cancellation</button><button class="button secondary small" :disabled="busy" @click="bookingAction = { booking: b, action: 'cancel_rejected' }"><X :size="15" />Decline</button></div>
+        </div>
+      </article>
+    </section>
     <article v-if="auth.user.role === 'admin'" class="panel verification">
       <span class="eyebrow">QUALITY STARTS HERE</span>
       <h2>Calapan property verification</h2>
@@ -253,8 +315,9 @@ onBeforeUnmount(() => chart?.destroy());
               <th>Property / room</th>
               <th>Dates</th>
               <th>Status</th>
-              <th>Payment</th>
+              <th>Special request</th>
               <th>Total</th>
+              <th v-if="auth.user.role === 'owner'">Conversation</th>
             </tr>
           </thead>
           <tbody>
@@ -272,13 +335,31 @@ onBeforeUnmount(() => chart?.destroy());
               <td>
                 <span class="badge" :class="b.status">{{ b.status }}</span>
               </td>
-              <td>{{ b.payment?.status }}<small>Simulation</small></td>
+              <td class="booking-special-request">{{ b.special_requests || "—" }}</td>
               <td>{{ money(b.total) }}</td>
+              <td v-if="auth.user.role === 'owner'"><button class="text-button" @click="chatBooking = b"><MessageCircle :size="15" />Message guest</button></td>
             </tr>
           </tbody>
         </table>
       </div>
       <p v-if="!bookings.length" class="empty">No reservations yet.</p>
     </article>
+    <div v-if="chatBooking" class="modal-backdrop" @click.self="chatBooking = null">
+      <BookingChat :booking="chatBooking" @close="chatBooking = null" />
+    </div>
+    <div v-if="bookingAction" class="modal-backdrop">
+      <section class="modal" role="dialog" aria-modal="true" aria-label="Confirm booking action">
+        <h2>{{ bookingAction.action === 'approved' ? 'Approve this booking?' : bookingAction.action === 'rejected_refund' ? 'Reject and record a refund?' : bookingAction.action === 'cancel_approved' ? 'Approve cancellation?' : bookingAction.action === 'cancel_rejected' ? 'Decline cancellation request?' : 'Reject this booking?' }}</h2>
+        <p>{{ bookingAction.booking.customer_display_name }} · {{ bookingAction.booking.hotel_name }} · Room {{ bookingAction.booking.room_number }}</p>
+        <p v-if="bookingAction.action === 'rejected_refund'">Send the guest the agreed 50% deposit refund outside RoomFinder first. Confirming records that you sent it; this app will not transfer the money.</p>
+        <p v-else-if="bookingAction.action === 'cancel_approved'">The reservation will be cancelled and the dates released. Contact the guest to arrange any refund.</p>
+        <p v-else-if="bookingAction.action === 'cancel_rejected'">The reservation will stay confirmed. The guest will be notified of your decision.</p>
+        <p v-else-if="bookingAction.action === 'rejected'">The guest will be notified and the room will be released. If the guest paid you a deposit, arrange any refund directly with them.</p>
+        <p v-else>The guest will be notified that the stay is confirmed.</p>
+        <button class="button full" :disabled="busy" @click="confirmBookingAction">{{ busy ? 'Saving...' : bookingAction.action === 'rejected_refund' ? 'I sent the refund — reject booking' : bookingAction.action === 'cancel_approved' ? 'Approve cancellation' : bookingAction.action === 'cancel_rejected' ? 'Decline request' : 'Confirm' }}</button>
+        <button class="text-button" :disabled="busy" @click="bookingAction = null">Back</button>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+      </section>
+    </div>
   </section>
 </template>

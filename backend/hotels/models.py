@@ -28,9 +28,6 @@ class Hotel(models.Model):
         validators=[MinValueValidator(-180), MaxValueValidator(180)],
     )
     amenities = models.JSONField(default=list)
-    stars = models.PositiveSmallIntegerField(
-        default=3, validators=[MinValueValidator(1), MaxValueValidator(5)]
-    )
     status = models.CharField(
         max_length=12,
         choices=[

@@ -85,7 +85,7 @@ watch(() => route.params.id, load);
       <article class="panel">
         <h2>Property information</h2>
         <p>{{ overview.hotel.description || "None yet." }}</p>
-        <p>Status: {{ overview.hotel.status }} · Rating: {{ overview.hotel.stars }} stars</p>
+        <p>Status: {{ overview.hotel.status }} · Guest rating: {{ overview.hotel.rating ? `${Number(overview.hotel.rating).toFixed(1)} / 5 (${overview.hotel.review_count} reviews)` : "New — no reviews yet" }}</p>
         <p v-if="overview.hotel.verification_note">Verification note: {{ overview.hotel.verification_note }}</p>
       </article>
 
@@ -127,7 +127,7 @@ watch(() => route.params.id, load);
           <p><strong>Beds</strong><br>{{ selectedRoom.beds }}</p>
           <p><strong>Area</strong><br>{{ selectedRoom.area }} m²</p>
           <p><strong>Status</strong><br>{{ selectedRoom.active ? "Active" : "Inactive" }}</p>
-          <p><strong>Position</strong><br>Row {{ selectedRoom.row + 1 }}, column {{ selectedRoom.column + 1 }}</p>
+          <p><strong>Floor-plan box</strong><br>{{ selectedRoom.plan ? `${selectedRoom.plan.width} m × ${selectedRoom.plan.height} m, from ${selectedRoom.plan.x} m left and ${selectedRoom.plan.y} m top` : "Legacy grid position" }}</p>
         </div>
         <h3>Photos ({{ selectedRoom.photos.length }})</h3>
         <p v-if="!selectedRoom.photos.length" class="muted">None yet.</p>
@@ -144,7 +144,7 @@ watch(() => route.params.id, load);
         <p v-if="!visibleBookings.length" class="muted">None yet.</p>
         <div v-else class="table-scroll">
           <table>
-            <thead><tr><th>Reference</th><th>Guest</th><th>Room</th><th>Check in</th><th>Check out</th><th>Guests</th><th>Total</th><th>Booking</th><th>Payment</th></tr></thead>
+            <thead><tr><th>Reference</th><th>Guest</th><th>Room</th><th>Check in</th><th>Check out</th><th>Guests</th><th>Total</th><th>Booking</th></tr></thead>
             <tbody>
               <tr v-for="booking in visibleBookings" :key="booking.id">
                 <td>{{ booking.reference }}</td>
@@ -155,7 +155,6 @@ watch(() => route.params.id, load);
                 <td>{{ booking.guests }}</td>
                 <td>{{ money(booking.total) }}</td>
                 <td>{{ booking.status }}</td>
-                <td>{{ booking.payment__status || "None" }}</td>
               </tr>
             </tbody>
           </table>
@@ -164,7 +163,7 @@ watch(() => route.params.id, load);
 
       <article class="panel delete-hotel-panel" v-if="!selectedFloorId">
         <h2>Delete this hotel</h2>
-        <p>This permanently removes the hotel, its floors, rooms, reservations, payments, reviews, promotions, and photos. The owner and guest accounts remain.</p>
+        <p>This permanently removes the hotel, its floors, rooms, reservations, reviews, promotions, and photos. The owner and guest accounts remain.</p>
         <p class="muted">Type <strong>{{ overview.hotel.name }}</strong> to confirm.</p>
         <form @submit.prevent="deleteHotel">
           <label for="delete-hotel-name">Hotel name</label>

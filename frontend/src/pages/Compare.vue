@@ -42,11 +42,8 @@ onMounted(async () => {
           <dd>{{ money(h.min_price) }}</dd>
           <dt>Guest rating</dt>
           <dd>
-            {{ h.rating ? Number(h.rating).toFixed(1) : "New" }} ·
-            {{ h.review_count }} reviews
+            {{ h.rating ? `${Number(h.rating).toFixed(1)} / 5 · ${h.review_count} reviews` : "New — no reviews yet" }}
           </dd>
-          <dt>Property class</dt>
-          <dd>{{ h.stars }} stars</dd>
           <dt>Amenities</dt>
           <dd>{{ h.amenities.join(" · ") }}</dd>
           <dt>The feeling</dt>

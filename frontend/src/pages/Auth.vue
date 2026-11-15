@@ -1,13 +1,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  ArrowUpRight,
-  BedDouble,
-  UserRound,
-  Building2,
-  ShieldCheck,
-} from "lucide-vue-next";
+import { ArrowUpRight, BedDouble } from "lucide-vue-next";
 import { api, errorMessage } from "../services/api";
 import { useAuth } from "../stores/auth";
 const route = useRoute(),
@@ -29,32 +23,6 @@ const route = useRoute(),
         ? route.query.role
         : "customer",
   });
-const loginRoles = [
-  {
-    value: "customer",
-    label: "Customer",
-    detail: "Find and book stays",
-    icon: UserRound,
-    demo: "traveler",
-  },
-  {
-    value: "owner",
-    label: "Hotel owner",
-    detail: "Manage your properties",
-    icon: Building2,
-    demo: "hotelowner",
-  },
-  {
-    value: "admin",
-    label: "Administrator",
-    detail: "Oversee RoomFinder",
-    icon: ShieldCheck,
-    demo: "administrator",
-  },
-];
-const selectedRole = computed(() =>
-  loginRoles.find((role) => role.value === form.value.role),
-);
 watch(register, (value) => {
   error.value = "";
   if (value && form.value.role === "admin") form.value.role = "customer";
@@ -79,7 +47,6 @@ async function submit() {
     await auth.login({
       username: form.value.username,
       password: form.value.password,
-      role: form.value.role,
     });
     const next =
       typeof route.query.next === "string" &&
@@ -121,32 +88,10 @@ async function submit() {
         {{
           register
             ? "Create an account for your next great stay."
-            : "Choose your role, then enter your account details."
+            : "Enter your account details to continue."
         }}
       </p>
       <form @submit.prevent="submit">
-        <fieldset v-if="!register" class="login-roles" :disabled="busy">
-          <legend>Log in as</legend>
-          <div class="role-options">
-            <label
-              v-for="role in loginRoles"
-              :key="role.value"
-              class="role-option"
-              :class="{ selected: form.role === role.value }"
-            >
-              <input
-                v-model="form.role"
-                type="radio"
-                name="login-role"
-                :value="role.value"
-                :aria-label="role.label"
-              />
-              <component :is="role.icon" :size="22" aria-hidden="true" />
-              <strong>{{ role.label }}</strong>
-              <small>{{ role.detail }}</small>
-            </label>
-          </div>
-        </fieldset>
         <div v-if="register" class="segmented">
           <label
             ><input type="radio" value="customer" v-model="form.role" />I'm a
@@ -215,11 +160,7 @@ async function submit() {
         >
       </p>
       <p class="auth-switch"><RouterLink to="/verify-email">Have a verification code? Enter it here</RouterLink></p>
-      <p class="demo-note">
-        {{ selectedRole.label }} demo: <strong>{{ selectedRole.demo }}</strong
-        ><br />
-        Password: RoomFinder!2026
-      </p>
+      <p class="demo-note">Demo accounts: <strong>traveler</strong>, <strong>hotelowner</strong>, or <strong>administrator</strong><br />Password: RoomFinder!2026</p>
     </div>
   </section>
 </template>

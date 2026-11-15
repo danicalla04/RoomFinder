@@ -11,6 +11,91 @@
   --line: #e1e5d9;
   --orange: #c67145;
 }
+
+.room-photo-field {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid #d7e1ce;
+  border-radius: 12px;
+  background: #f5f8f1;
+}
+.room-photo-field strong { color: #274b36; }
+.room-photo-field strong span { color: #a04436; font-size: 11px; }
+.room-photo-field p, .room-photo-field small { margin: 5px 0 0; color: #6e7c68; font-size: 12px; }
+.room-photo-field img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; }
+.room-photo-field input { width: 100%; }
+.room-view-switch {
+  display: inline-flex;
+  gap: 4px;
+  margin: 14px 0 16px;
+  padding: 4px;
+  border: 1px solid #d7e1ce;
+  border-radius: 10px;
+  background: #eef3e9;
+}
+.availability-refreshing { display: grid; place-content: center; gap: 8px; min-height: 220px; margin: 12px 0; padding: 24px; border: 1px solid #dce5d4; border-radius: 12px; background: linear-gradient(135deg, #f5f8f1, #fff); text-align: center; }
+.availability-refreshing p { margin: 0; color: #65755e; font-size: 13px; }
+.room-view-switch button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #65755e;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.room-view-switch button.active { background: #fff; color: #254e3a; box-shadow: 0 2px 9px #1d39251c; }
+.room-view-switch button:focus-visible, .room-photo-card:focus-visible { outline: 3px solid #608c5d; outline-offset: 2px; }
+.room-photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.room-photo-card {
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #dce5d4;
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  box-shadow: 0 8px 24px #344b2710;
+  cursor: pointer;
+  transition: transform .18s, box-shadow .18s, border-color .18s;
+}
+.room-photo-card:not(:disabled):hover { transform: translateY(-3px); box-shadow: 0 14px 30px #344b2720; }
+.room-photo-card.chosen { border: 2px solid #3e704c; }
+.room-photo-card:disabled { cursor: default; opacity: .72; }
+.room-photo-card-image { position: relative; height: 180px; background: #e7eddf; }
+.room-photo-card-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.room-photo-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; width: 100%; height: 100%; color: #788a72; font-size: 12px; }
+.room-photo-status { position: absolute; right: 12px; top: 12px; padding: 7px 10px; border-radius: 100px; background: #fffef3ee; color: #35513d; font-size: 11px; font-weight: 700; }
+.room-photo-status.booked, .room-photo-status.unavailable { background: #fff1e9; color: #9a4d37; }
+.room-photo-status.capacity { background: #fff6d9; color: #826527; }
+.room-photo-status.selected { background: #e0f4df; color: #256341; }
+.room-photo-card-body { padding: 18px; }
+.room-photo-card-body h3 { margin: 7px 0; font-size: 21px; }
+.room-photo-card-body p { margin: 0 0 14px; color: #778675; font-size: 11px; }
+.room-photo-card-body strong { color: #244c37; font-size: 18px; }
+.room-photo-card-body small { color: #8c9988; font-size: 11px; font-weight: 400; }
+.reservation-room-photo { position: relative; overflow: hidden; height: 190px; margin: 18px 0 12px; border-radius: 9px; background: #e7eddf; }
+.reservation-room-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.reservation-room-photo > span { position: absolute; left: 12px; bottom: 12px; padding: 7px 10px; border-radius: 5px; background: #203d30dd; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.reservation-room-description { color: #687a68; font-size: 12px; line-height: 1.55; }
+.reservation-panel .room-facts { margin: 12px 0; }
+.owner-booking-queue { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin: 24px 0; }
+.owner-booking-queue h2 { margin: 8px 0; }
+.owner-booking-queue h2 small { font-size: 14px; color: #7a8b70; }
+.booking-action-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid #e3e9dd; padding: 16px 0; }
+.booking-action-row strong { color: #284b37; }
+.booking-action-row p { margin: 5px 0; font-size: 12px; color: #657561; }
+.booking-action-row small { color: #809078; }
+.booking-special-request { min-width: 180px; max-width: 360px; color: #5e6d59; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
+.booking-action-row .booking-special-request { margin-top: 10px; padding: 10px 12px; border-left: 3px solid #a9bd91; border-radius: 0 6px 6px 0; background: #f4f7ef; }
+.booking-action-buttons { display: flex; gap: 7px; flex-wrap: wrap; }
+@media (max-width: 960px) { .owner-booking-queue { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .booking-action-row { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 640px) { .room-photo-grid { grid-template-columns: 1fr; } .room-view-switch { display: flex; } .room-view-switch button { flex: 1; } }
 * {
   box-sizing: border-box;
 }
@@ -187,6 +272,26 @@ h2 > span {
   background: none;
   padding: 6px;
   align-items: center;
+}
+.notification-link {
+  position: relative;
+}
+.notification-count {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fbfaf6;
+  border-radius: 999px;
+  background: #c93636;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
 }
 .profile-link {
   display: flex;
@@ -1157,22 +1262,6 @@ input[type="radio"] {
   font-size: 10px;
   color: #97a089;
   line-height: 1.7;
-}
-.simulation-note {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: #6d8559;
-  font-size: 10px;
-  background: #f2f5ed;
-  border-radius: 4px;
-  padding: 10px;
-}
-.simulation-note small {
-  display: block;
-  font-size: 9px;
-  margin-top: 3px;
-  color: #95a086;
 }
 .selected-room {
   margin-top: 23px;
@@ -3006,6 +3095,119 @@ td .text-button {
   background: #fff;
   margin: 0 0 25px;
   position: relative;
+}
+.hotel-directions-button {
+  margin-left: 10px;
+}
+.navigation-panel {
+  margin: 0 0 25px;
+  overflow: hidden;
+  border: 1px solid #dce3d2;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px #17362710;
+}
+.navigation-header,
+.navigation-details {
+  padding: 18px 20px;
+}
+.navigation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e3e8dd;
+}
+.navigation-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 5px 0 0;
+  font-size: 18px;
+}
+.navigation-header .icon-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e0e6d6;
+  border-radius: 50%;
+  background: #fff;
+}
+.navigation-map-wrap {
+  position: relative;
+}
+.navigation-map {
+  width: 100%;
+  height: min(58vh, 480px);
+  min-height: 310px;
+  background: #e8eee4;
+}
+.navigation-map-status {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 2;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  padding: 9px 14px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 3px 14px #17362720;
+  color: #214f40;
+  font-size: 13px;
+}
+.navigation-details {
+  display: grid;
+  gap: 12px;
+}
+.navigation-destination {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #214f40;
+}
+.navigation-destination span {
+  display: grid;
+  gap: 3px;
+}
+.navigation-destination small,
+.navigation-details > .muted {
+  color: #778273;
+  font-size: 12px;
+}
+.navigation-instruction {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f3f6ef;
+  color: #214f40;
+  font-weight: 600;
+}
+.navigation-summary {
+  margin: 0;
+  color: #56604f;
+  font-size: 13px;
+}
+.navigation-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-self: start;
+}
+.navigation-ar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+.navigation-ar-note {
+  margin: 0;
+  color: #778273;
+  font-size: 12px;
 }
 .map-toolbar {
   display: flex;

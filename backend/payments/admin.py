@@ -1,4 +1,2 @@
-from django.contrib import admin
-from .models import Payment
-
-admin.site.register(Payment)
+# Legacy payment records are kept for data compatibility, but this app no longer
+# exposes payment management in the local RoomFinder interface.

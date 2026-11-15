@@ -8,6 +8,13 @@ class Notification(models.Model):
     )
     title = models.CharField(max_length=160)
     message = models.TextField()
+    booking = models.ForeignKey(
+        "bookings.Booking",
+        on_delete=models.SET_NULL,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
     read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

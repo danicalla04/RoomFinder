@@ -11,6 +11,9 @@ class Floor(models.Model):
     columns = models.PositiveSmallIntegerField(
         default=6, validators=[MinValueValidator(1)]
     )
+    plan_width_m = models.DecimalField(max_digits=6, decimal_places=2, default=30)
+    plan_height_m = models.DecimalField(max_digits=6, decimal_places=2, default=20)
+    areas = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["number"]
@@ -33,11 +36,13 @@ class Room(models.Model):
         default=2, validators=[MinValueValidator(1)]
     )
     beds = models.CharField(max_length=80, default="1 queen bed")
-    area = models.PositiveSmallIntegerField(
+    area = models.DecimalField(
+        max_digits=7, decimal_places=2,
         default=28, validators=[MinValueValidator(1)]
     )
     row = models.PositiveSmallIntegerField(default=0)
     column = models.PositiveSmallIntegerField(default=0)
+    plan = models.JSONField(null=True, blank=True, default=None)
     active = models.BooleanField(default=True)
 
     class Meta:

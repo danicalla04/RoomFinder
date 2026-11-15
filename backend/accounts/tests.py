@@ -5,6 +5,11 @@ from django.utils import timezone
 from datetime import timedelta
 import re
 from .models import User
+from bookings.tests import fixture
+from bookings.models import Booking
+from hotels.models import Hotel
+from rooms.models import Floor, Room
+from datetime import date
 
 
 class RoleLoginTests(APITestCase):
@@ -168,3 +173,52 @@ class EmailVerificationTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         owner.refresh_from_db()
         self.assertFalse(owner.is_active)
+
+
+class AdminUserDeletionTests(APITestCase):
+    def test_deleting_owner_removes_property_records_but_keeps_guests(self):
+        owner, customer, other, admin, hotel, floor, room = fixture()
+        booking = Booking.objects.create(
+            customer=customer, room=room,
+            check_in=date.today() + timedelta(days=1),
+            check_out=date.today() + timedelta(days=2), total="3000.00",
+        )
+        url = f"/api/v1/admin/users/{owner.pk}/"
+        self.assertEqual(self.client.delete(url, {"confirm_username": "owner"}, format="json").status_code, 401)
+        self.client.force_authenticate(owner)
+        self.assertEqual(self.client.delete(url, {"confirm_username": "owner"}, format="json").status_code, 403)
+        self.client.force_authenticate(admin)
+        self.assertEqual(self.client.delete(url, {"confirm_username": "wrong"}, format="json").status_code, 400)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(url, {"confirm_username": "owner"}, format="json")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(User.objects.filter(pk=owner.pk).exists())
+        self.assertTrue(User.objects.filter(pk__in=[customer.pk, other.pk, admin.pk]).count() == 3)
+        self.assertFalse(Hotel.objects.filter(pk=hotel.pk).exists())
+        self.assertFalse(Room.objects.filter(pk=room.pk).exists())
+        self.assertFalse(Booking.objects.filter(pk=booking.pk).exists())
+
+    def test_deleting_customer_removes_bookings_but_keeps_hotel_and_admin(self):
+        owner, customer, other, admin, hotel, floor, room = fixture()
+        booking = Booking.objects.create(
+            customer=customer, room=room,
+            check_in=date.today() + timedelta(days=1),
+            check_out=date.today() + timedelta(days=2), total="3000.00",
+        )
+        self.client.force_authenticate(admin)
+        self.assertEqual(self.client.delete(
+            f"/api/v1/admin/users/{customer.pk}/", {"confirm_username": customer.username}, format="json"
+        ).status_code, 204)
+        self.assertFalse(User.objects.filter(pk=customer.pk).exists())
+        self.assertFalse(Booking.objects.filter(pk=booking.pk).exists())
+        self.assertTrue(Hotel.objects.filter(pk=hotel.pk).exists())
+        self.assertTrue(User.objects.filter(pk=admin.pk).exists())
+
+    def test_administrator_cannot_be_deleted(self):
+        owner, customer, other, admin, hotel, floor, room = fixture()
+        self.client.force_authenticate(admin)
+        response = self.client.delete(
+            f"/api/v1/admin/users/{admin.pk}/", {"confirm_username": admin.username}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(User.objects.filter(pk=admin.pk).exists())

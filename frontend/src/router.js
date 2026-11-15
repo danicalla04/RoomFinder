@@ -22,6 +22,11 @@ const router = createRouter({
       meta: { auth: true },
     },
     {
+      path: "/messages",
+      component: () => import("./pages/Messages.vue"),
+      meta: { roles: ["customer", "owner"] },
+    },
+    {
       path: "/profile",
       component: () => import("./pages/Profile.vue"),
       meta: { auth: true },

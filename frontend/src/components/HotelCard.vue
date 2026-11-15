@@ -17,11 +17,7 @@ const compare = useCompare();
         loading="lazy"
       />
       <div v-else class="image-fallback">{{ hotel.name.slice(0, 1) }}</div>
-      <span
-        class="image-tag"
-        title="Owner-provided property category, not guest review score or official accreditation."
-        >{{ hotel.stars }}-star category</span
-      ></RouterLink
+      </RouterLink
     ><button
       class="compare-button"
       :class="{ selected: compare.ids.includes(hotel.id) }"
@@ -40,9 +36,7 @@ const compare = useCompare();
         ><Star :size="13" fill="currentColor" />{{
           hotel.rating ? Number(hotel.rating).toFixed(1) : "New"
         }}
-        <small v-if="hotel.review_count"
-          >({{ hotel.review_count }})</small
-        ></span
+        <small>{{ hotel.review_count ? `(${hotel.review_count} reviews)` : "No reviews yet" }}</small></span
       >
     </div>
     <RouterLink :to="{ path: `/hotels/${hotel.id}`, query: dates }"

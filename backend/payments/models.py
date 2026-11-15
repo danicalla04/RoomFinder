@@ -10,8 +10,8 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     method = models.CharField(max_length=20, default="simulation")
     status = models.CharField(
-        max_length=12,
-        choices=[("approved", "Approved"), ("refunded", "Refunded")],
+        max_length=14,
+        choices=[("approved", "Deposit simulated"), ("refund_pending", "Refund pending"), ("refunded", "Refunded")],
         default="approved",
     )
     created_at = models.DateTimeField(auto_now_add=True)

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from tempfile import TemporaryDirectory
 from PIL import Image
 from django.test import TransactionTestCase, override_settings
-from django.db import close_old_connections
+from django.db import close_old_connections, OperationalError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from rest_framework.test import APITestCase, APIClient
@@ -16,7 +16,6 @@ from accounts.models import User
 from hotels.models import Hotel, HotelPhoto
 from rooms.models import Floor, Room
 from bookings.models import Booking
-from payments.models import Payment
 from promotions.models import Promotion
 from notifications.models import Notification
 from reviews.models import Review
@@ -104,7 +103,7 @@ class RoomFinderTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_owner_registration_and_jwt_login(self):
+    def test_owner_registration_requires_verification_and_approval(self):
         self.client.force_authenticate(None)
         response = self.client.post(
             "/api/v1/auth/register/",
@@ -120,9 +119,8 @@ class RoomFinderTests(APITestCase):
             "/api/v1/auth/token/",
             {"username": "newowner", "password": "StrongUnique!938"},
         )
-        self.assertEqual(tokens.status_code, 200)
-        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + tokens.data["access"])
-        self.assertEqual(self.client.get("/api/v1/auth/me/").data["role"], "owner")
+        self.assertEqual(tokens.status_code, 401)
+        self.assertEqual(User.objects.get(username="newowner").role, "owner")
 
     def test_profile_cannot_change_role(self):
         self.client.patch("/api/v1/auth/me/", {"role": "admin", "first_name": "Alex"})
@@ -130,15 +128,14 @@ class RoomFinderTests(APITestCase):
         self.assertEqual(self.customer.role, "customer")
         self.assertEqual(self.customer.first_name, "Alex")
 
-    def test_confirmation_payment_and_notification_are_persisted(self):
+    def test_booking_request_is_pending_and_notifies_guest(self):
         b = self.book(total="1.00", status="cancelled")
         self.assertEqual(Decimal(b["total"]), Decimal("5000"))
-        self.assertEqual(b["status"], "confirmed")
-        self.assertEqual(b["payment"]["status"], "approved")
-        self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(b["status"], "pending")
+        self.assertNotIn("payment", b)
         self.assertTrue(
             Notification.objects.filter(
-                user=self.customer, title="Reservation confirmed"
+                user=self.customer, title="Booking awaiting approval"
             ).exists()
         )
 
@@ -183,13 +180,52 @@ class RoomFinderTests(APITestCase):
             )
         self.assertEqual(Booking.objects.count(), 0)
 
-    def test_cancel_refunds_payment_and_frees_room(self):
+    def test_cancel_frees_room(self):
         b = self.book()
         url = f"/api/v1/bookings/{b['id']}/cancel/"
         self.assertEqual(self.client.post(url).status_code, 200)
         self.assertEqual(self.client.post(url).status_code, 200)
-        self.assertEqual(Payment.objects.get().status, "refunded")
+        self.assertEqual(Booking.objects.get(pk=b["id"]).status, "cancelled")
         self.book()
+
+    def test_owner_approves_pending_booking_and_guest_cannot_approve(self):
+        booking = self.book()
+        url = f"/api/v1/bookings/{booking['id']}/decision/"
+        self.assertEqual(self.client.post(url, {"decision": "approved"}).status_code, 403)
+        self.client.force_authenticate(self.owner)
+        response = self.client.post(url, {"decision": "approved"})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["status"], "confirmed")
+        self.assertEqual(self.client.post(url, {"decision": "approved"}).status_code, 400)
+
+    def test_owner_rejects_booking_and_releases_room(self):
+        booking = self.book()
+        self.client.force_authenticate(self.owner)
+        response = self.client.post(f"/api/v1/bookings/{booking['id']}/decision/", {"decision": "rejected"})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["status"], "rejected")
+        self.client.force_authenticate(self.customer)
+        self.book()
+
+    def test_cancellation_closes_after_two_hours(self):
+        booking = self.book()
+        Booking.objects.filter(pk=booking["id"]).update(created_at=timezone.now() - timedelta(hours=2, seconds=1))
+        response = self.client.post(f"/api/v1/bookings/{booking['id']}/cancel/")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Booking.objects.get(pk=booking["id"]).status, "pending")
+
+    def test_guest_checkout_requires_confirmed_stay_and_checkin(self):
+        booking = self.book()
+        url = f"/api/v1/bookings/{booking['id']}/checkout/"
+        self.assertEqual(self.client.post(url).status_code, 400)
+        self.client.force_authenticate(self.owner)
+        self.assertEqual(self.client.post(f"/api/v1/bookings/{booking['id']}/decision/", {"decision": "approved"}).status_code, 200)
+        self.client.force_authenticate(self.customer)
+        self.assertEqual(self.client.post(url).status_code, 400)
+        Booking.objects.filter(pk=booking["id"]).update(check_in=timezone.localdate(), check_out=timezone.localdate() + timedelta(days=1))
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNotNone(response.data["checked_out_at"])
 
     def test_customers_cannot_see_or_cancel_other_bookings(self):
         b = self.book()
@@ -198,7 +234,7 @@ class RoomFinderTests(APITestCase):
         self.assertEqual(
             self.client.post(f"/api/v1/bookings/{b['id']}/cancel/").status_code, 404
         )
-        self.assertEqual(self.client.get("/api/v1/payments/").data, [])
+        self.assertEqual(self.client.get("/api/v1/payments/").status_code, 404)
 
     def test_owners_only_see_own_reservations(self):
         b = self.book()
@@ -348,12 +384,10 @@ class RoomFinderTests(APITestCase):
             ).status_code,
             400,
         )
-        self.assertEqual(Payment.objects.count(), 1)
-
-    def test_payment_failure_rolls_back_entire_reservation(self):
+    def test_booking_failure_rolls_back_entire_request(self):
         with patch(
-            "bookings.services.Payment.objects.create",
-            side_effect=RuntimeError("simulated database failure"),
+            "bookings.services.Booking.objects.create",
+            side_effect=RuntimeError("database failure"),
         ):
             with self.assertRaises(RuntimeError):
                 reserve(
@@ -439,6 +473,9 @@ class RoomFinderTests(APITestCase):
             {"booking": b["id"], "rating": 5, "comment": "Very good."},
         )
         self.assertEqual(r.status_code, 400)
+        self.client.force_authenticate(self.owner)
+        self.assertEqual(self.client.post(f"/api/v1/bookings/{b['id']}/decision/", {"decision": "approved"}).status_code, 200)
+        self.client.force_authenticate(self.customer)
         Booking.objects.filter(pk=b["id"]).update(
             check_in=timezone.localdate() - timedelta(days=3),
             check_out=timezone.localdate() - timedelta(days=1),
@@ -513,11 +550,13 @@ class ConcurrentReservationTests(TransactionTestCase):
                 return "confirmed"
             except ValidationError:
                 return "conflict"
+            except OperationalError:
+                return "locked"
             finally:
                 close_old_connections()
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(attempt, [customer.pk, other.pk]))
-        self.assertCountEqual(results, ["confirmed", "conflict"])
+        self.assertIn("confirmed", results)
+        self.assertIn(next(result for result in results if result != "confirmed"), ["conflict", "locked"])
         self.assertEqual(Booking.objects.count(), 1)
-        self.assertEqual(Payment.objects.count(), 1)

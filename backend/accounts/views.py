@@ -6,11 +6,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
+from django.db.models import Avg, Count
 from smtplib import SMTPException
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
     RoleTokenObtainPairSerializer,
+    AdminUserUpdateSerializer,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User
@@ -25,6 +27,33 @@ from .serializers import EmailDeliveryUnavailable
 from accounts.permissions import IsAdmin
 
 logger = logging.getLogger(__name__)
+
+
+def delete_bookings(bookings):
+    Review.objects.filter(booking__in=bookings).delete()
+    Payment.objects.filter(booking__in=bookings).delete()
+    bookings.delete()
+
+
+def delete_hotel_data(hotel):
+    hotel_photos = list(HotelPhoto.objects.filter(hotel=hotel).values_list("image", flat=True))
+    room_photos = list(RoomPhoto.objects.filter(room__floor__hotel=hotel).values_list("image", flat=True))
+    delete_bookings(Booking.objects.filter(room__floor__hotel=hotel))
+    Room.objects.filter(floor__hotel=hotel).delete()
+    Floor.objects.filter(hotel=hotel).delete()
+    hotel.delete()
+
+    def remove_photos():
+        for model, names in ((HotelPhoto, hotel_photos), (RoomPhoto, room_photos)):
+            storage = model._meta.get_field("image").storage
+            for name in set(names):
+                if name:
+                    try:
+                        storage.delete(name)
+                    except Exception:
+                        logger.exception("Could not remove hotel photo file %s", name)
+
+    transaction.on_commit(remove_photos)
 
 
 class RegisterView(CreateAPIView):
@@ -83,6 +112,12 @@ class ResendVerificationView(APIView):
         except User.DoesNotExist:
             pass
         except (OSError, RuntimeError, SMTPException) as exc:
+            logger.error(
+                "Verification email resend failed: type=%s errno=%s smtp_code=%s",
+                type(exc).__name__,
+                getattr(exc, "errno", None),
+                getattr(exc, "smtp_code", None),
+            )
             raise EmailDeliveryUnavailable() from exc
         return Response({"detail": "If this account needs verification, a new email has been sent."})
 
@@ -92,7 +127,7 @@ class AdminUsersView(APIView):
 
     def get(self, request):
         users = User.objects.order_by("-date_joined", "-id").only(
-            "id", "username", "first_name", "last_name", "email", "role", "is_active", "email_verified_at",
+            "id", "username", "first_name", "last_name", "email", "phone", "role", "is_active", "email_verified_at",
             "owner_approval_status", "date_joined"
         )
         hotels_by_owner = {}
@@ -107,7 +142,10 @@ class AdminUsersView(APIView):
                 "id": user.id,
                 "username": user.username,
                 "display_name": user.get_full_name() or user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
                 "email": user.email,
+                "phone": user.phone,
                 "role": user.role,
                 "is_active": user.is_active,
                 "email_verified": bool(user.email_verified_at),
@@ -117,6 +155,38 @@ class AdminUsersView(APIView):
             }
             for user in users
         ])
+
+
+class AdminUserDetailView(APIView):
+    permission_classes = [IsAdmin]
+
+    def patch(self, request, pk):
+        user = get_object_or_404(User, pk=pk)
+        if user.role == User.Role.ADMIN or user.is_staff or user.is_superuser:
+            return Response({"detail": "Administrator accounts cannot be edited here."}, status=403)
+        serializer = AdminUserUpdateSerializer(user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "display_name": user.get_full_name() or user.username,
+            "email": user.email,
+            "phone": user.phone,
+        })
+
+    def delete(self, request, pk):
+        with transaction.atomic():
+            user = get_object_or_404(User.objects.select_for_update(), pk=pk)
+            if user.role == User.Role.ADMIN or user.is_staff or user.is_superuser:
+                return Response({"detail": "Administrator accounts cannot be deleted here."}, status=403)
+            if request.data.get("confirm_username") != user.username:
+                return Response({"detail": "Type the exact username to confirm deletion."}, status=400)
+            for hotel in Hotel.objects.select_for_update().filter(owner=user):
+                delete_hotel_data(hotel)
+            delete_bookings(Booking.objects.filter(customer=user))
+            user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ReviewOwnerView(APIView):
@@ -149,38 +219,21 @@ class AdminHotelOverviewView(APIView):
             hotel = get_object_or_404(Hotel.objects.select_for_update(), pk=pk)
             if request.data.get("confirm_name") != hotel.name:
                 return Response({"detail": "Type the exact hotel name to confirm deletion."}, status=400)
-
-            hotel_photos = list(HotelPhoto.objects.filter(hotel=hotel).values_list("image", flat=True))
-            room_photos = list(RoomPhoto.objects.filter(room__floor__hotel=hotel).values_list("image", flat=True))
-            bookings = Booking.objects.filter(room__floor__hotel=hotel)
-            Review.objects.filter(booking__in=bookings).delete()
-            Payment.objects.filter(booking__in=bookings).delete()
-            bookings.delete()
-            Room.objects.filter(floor__hotel=hotel).delete()
-            Floor.objects.filter(hotel=hotel).delete()
-            hotel.delete()
-
-            def remove_photos():
-                for model, names in ((HotelPhoto, hotel_photos), (RoomPhoto, room_photos)):
-                    storage = model._meta.get_field("image").storage
-                    for name in set(names):
-                        if name:
-                            try:
-                                storage.delete(name)
-                            except Exception:
-                                logger.exception("Could not remove hotel photo file %s", name)
-
-            transaction.on_commit(remove_photos)
+            delete_hotel_data(hotel)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get(self, request, pk):
         hotel = get_object_or_404(Hotel.objects.select_related("owner"), pk=pk)
+        guest_reviews = hotel.floors.aggregate(
+            rating=Avg("rooms__bookings__review__rating"),
+            review_count=Count("rooms__bookings__review"),
+        )
         floors = list(Floor.objects.filter(hotel=hotel).order_by("number").values(
-            "id", "number", "name", "columns"
+            "id", "number", "name", "columns", "plan_width_m", "plan_height_m", "areas"
         ))
         rooms = list(Room.objects.filter(floor__hotel=hotel).order_by("floor__number", "number").values(
             "id", "floor_id", "number", "kind", "description", "price", "capacity",
-            "beds", "area", "row", "column", "active", "floor__number"
+            "beds", "area", "row", "column", "plan", "active", "floor__number"
         ))
         photos_by_room = {}
         for photo in RoomPhoto.objects.filter(room__floor__hotel=hotel).values(
@@ -194,13 +247,14 @@ class AdminHotelOverviewView(APIView):
             room["photos"] = photos_by_room.get(room["id"], [])
         bookings = list(Booking.objects.filter(room__floor__hotel=hotel).order_by("-created_at").values(
             "id", "reference", "customer__username", "room_id", "room__number", "check_in",
-            "check_out", "guests", "total", "status", "payment__status"
+            "check_out", "guests", "total", "status"
         ))
         return Response({
             "hotel": {
                 "id": hotel.id, "name": hotel.name, "description": hotel.description,
                 "owner": hotel.owner.username, "address": hotel.address, "city": hotel.city,
-                "status": hotel.status, "stars": hotel.stars, "verification_note": hotel.verification_note,
+                "status": hotel.status, "verification_note": hotel.verification_note,
+                "rating": guest_reviews["rating"], "review_count": guest_reviews["review_count"],
             },
             "floors": floors,
             "rooms": rooms,

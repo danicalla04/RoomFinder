@@ -17,7 +17,7 @@ class ReviewSerializer(serializers.ModelSerializer):
     def validate_booking(self, booking):
         if booking.customer_id != self.context["request"].user.id:
             raise serializers.ValidationError("Review your own reservation only.")
-        if booking.status != "confirmed" or booking.check_out > timezone.localdate():
+        if booking.status != "confirmed" or (not booking.checked_out_at and booking.check_out > timezone.localdate()):
             raise serializers.ValidationError(
                 "Reviews are available after a completed stay."
             )

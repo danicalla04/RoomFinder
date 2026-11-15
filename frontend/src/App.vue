@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, watch, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import {
   BedDouble,
@@ -9,16 +9,26 @@ import {
   ArrowRight,
   Menu,
   X,
+  MessageCircle,
 } from "lucide-vue-next";
 import { useAuth } from "./stores/auth";
 import { useCompare } from "./stores/compare";
+import { useNotifications } from "./stores/notifications";
+import { useMessages } from "./stores/messages";
 import { ref } from "vue";
 const auth = useAuth(),
   compare = useCompare(),
+  notifications = useNotifications(),
+  messages = useMessages(),
   router = useRouter(),
   open = ref(false);
 const staff = computed(() => auth.user && auth.user.role !== "customer");
 const homePath = computed(() => staff.value ? "/dashboard" : "/");
+watch(() => auth.user?.id, (id) => {
+  if (id) { notifications.start(); messages.start(); }
+  else { notifications.stop(); messages.stop(); }
+}, { immediate: true });
+onBeforeUnmount(() => { notifications.stop(); messages.stop(); });
 function logout() {
   auth.logout();
   router.push("/login");
@@ -46,7 +56,7 @@ function logout() {
         v-if="auth.user?.role === 'customer'"
         to="/bookings"
         @click="open = false"
-        >My reservations</RouterLink
+        >My bookings</RouterLink
       ><RouterLink v-if="staff" to="/dashboard" @click="open = false"
         >Dashboard</RouterLink
       ><RouterLink v-if="auth.user.role === 'admin'" to="/admin/users" @click="open = false"
@@ -64,9 +74,15 @@ function logout() {
       <template v-if="auth.user"
         ><RouterLink
           to="/notifications"
-          class="icon-button"
-          aria-label="Notifications"
-          ><Bell :size="20" /></RouterLink
+          class="icon-button notification-link"
+          :aria-label="notifications.unreadCount ? `Notifications, ${notifications.unreadCount} unread` : 'Notifications'"
+          ><Bell :size="20" /><span v-if="notifications.unreadCount" class="notification-count">{{ notifications.unreadCount > 99 ? '99+' : notifications.unreadCount }}</span></RouterLink
+        ><RouterLink
+          v-if="auth.user.role !== 'admin'"
+          to="/messages"
+          class="icon-button notification-link"
+          :aria-label="messages.unreadCount ? `Messages, ${messages.unreadCount} unread` : 'Messages'"
+          ><MessageCircle :size="20" /><span v-if="messages.unreadCount" class="notification-count">{{ messages.unreadCount > 99 ? '99+' : messages.unreadCount }}</span></RouterLink
         ><RouterLink to="/profile" class="profile-link"
           ><UserRound :size="17" /><span>{{
             auth.user.first_name || auth.user.username
@@ -96,7 +112,6 @@ function logout() {
       ><BedDouble :size="22" />roomfinder.</RouterLink
     >
     <p>A little less searching. A little more staying.</p>
-    <span>Made for your next chapter · Calapan City, Oriental Mindoro</span
-    ><small>Development demo · Payments are simulated</small>
+    <span>Made for your next chapter · Calapan City, Oriental Mindoro</span>
   </footer>
 </template>

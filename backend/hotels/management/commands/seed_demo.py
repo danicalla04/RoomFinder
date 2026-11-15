@@ -11,7 +11,6 @@ from hotels.models import Hotel, HotelPhoto
 from hotels.demo_data import DEMO_HOTELS
 from rooms.models import Floor, Room, RoomPhoto
 from bookings.models import Booking
-from payments.models import Payment
 from promotions.models import Promotion
 from reviews.models import Review
 from notifications.models import Notification
@@ -51,7 +50,6 @@ class Command(BaseCommand):
             lng,
             price,
             address,
-            stars,
             amenities,
             photo,
         ) in enumerate(specs):
@@ -64,7 +62,6 @@ class Command(BaseCommand):
                     "latitude": lat,
                     "longitude": lng,
                     "address": address,
-                    "stars": stars,
                     "amenities": amenities,
                     "status": "verified",
                 },
@@ -127,8 +124,8 @@ class Command(BaseCommand):
                 check_out=timezone.localdate() - timedelta(days=6 + idx),
                 guests=2,
                 total=room.price * 2,
+                status="confirmed",
             )
-            Payment.objects.create(booking=past, amount=past.total)
             Review.objects.create(
                 booking=past,
                 rating=5 if idx % 2 == 0 else 4,
@@ -138,7 +135,7 @@ class Command(BaseCommand):
             user=users["customer"],
             title="Welcome to RoomFinder",
             defaults={
-                "message": "Explore a stay, choose your exact room, and reserve with simulated payment. No real money is charged."
+                "message": "Explore a stay, choose your room, and send a booking request to the hotel owner."
             },
         )
         call_command("seed_demo_activity", stdout=self.stdout)

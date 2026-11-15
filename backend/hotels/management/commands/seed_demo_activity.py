@@ -10,7 +10,6 @@ from rooms.models import Room
 from bookings.models import Booking
 from bookings.services import reserve
 from bookings.demo import DEMO_PREFIX
-from payments.models import Payment
 
 
 class Command(BaseCommand):
@@ -118,10 +117,10 @@ class Command(BaseCommand):
                     ),
                 )
                 Booking.objects.filter(pk=booking.pk).update(created_at=created_at)
-                Payment.objects.filter(booking=booking).update(created_at=created_at)
+                Booking.objects.filter(pk=booking.pk).update(status="confirmed")
                 created_count += 1
         self.stdout.write(
             self.style.SUCCESS(
-                f"Demo activity ready: {created_count} new simulated reservations, {unavailable_count} sample rooms marked unavailable, {skipped} conflicting/missing scenarios skipped. Existing reservations were preserved."
+                f"Demo activity ready: {created_count} sample reservations, {unavailable_count} sample rooms marked unavailable, {skipped} conflicting/missing scenarios skipped. Existing reservations were preserved."
             )
         )

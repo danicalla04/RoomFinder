@@ -1,3 +1,4 @@
+import logging
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import User
@@ -8,12 +9,20 @@ from smtplib import SMTPException
 from rest_framework.exceptions import APIException
 from .email_verification import send_verification
 
+logger = logging.getLogger(__name__)
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "email", "first_name", "last_name", "phone", "role"]
         read_only_fields = ["id", "username", "email", "role"]
+
+
+class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "phone"]
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -41,6 +50,12 @@ class RegisterSerializer(serializers.ModelSerializer):
                 send_verification(user)
                 return user
         except (OSError, RuntimeError, SMTPException) as exc:
+            logger.error(
+                "Verification email delivery failed: type=%s errno=%s smtp_code=%s",
+                type(exc).__name__,
+                getattr(exc, "errno", None),
+                getattr(exc, "smtp_code", None),
+            )
             raise EmailDeliveryUnavailable() from exc
 
 

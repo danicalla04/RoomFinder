@@ -5,9 +5,10 @@ import {
   CITY_NAME,
   PROVINCE_NAME,
   LOCATION_LABEL,
-  CALAPAN_CENTER,
 } from "../services/location";
 import { useAuth } from "../stores/auth";
+import PropertyLocationPicker from "../components/PropertyLocationPicker.vue";
+import FloorPlanEditor from "../components/FloorPlanEditor.vue";
 import {
   Plus,
   Save,
@@ -31,6 +32,11 @@ const auth = useAuth(),
   busy = ref(false),
   loading = ref(true),
   hotelModal = ref(false),
+  showLocationPicker = ref(false),
+  propertyPhotos = ref([]),
+  propertyPhotoInput = ref(null),
+  roomPhoto = ref(null),
+  roomPhotoInput = ref(null),
   roomModal = ref(false),
   floorModal = ref(false),
   promoModal = ref(false),
@@ -41,6 +47,10 @@ const hotel = computed(() => hotels.value.find((h) => h.id === hotelId.value)),
   floorRooms = computed(() =>
     rooms.value.filter((r) => r.floor === floorId.value),
   );
+const hasPropertyLocation = computed(() =>
+  hf.value.latitude != null && hf.value.longitude != null &&
+  Number.isFinite(Number(hf.value.latitude)) && Number.isFinite(Number(hf.value.longitude)),
+);
 const hf = ref({}),
   rf = ref({}),
   ff = ref({}),
@@ -101,13 +111,32 @@ function editHotel(h) {
         city: CITY_NAME,
         address: "",
         description: "",
-        latitude: CALAPAN_CENTER[0],
-        longitude: CALAPAN_CENTER[1],
-        stars: 3,
+        latitude: null,
+        longitude: null,
       };
   amenitiesText.value = h?.amenities.join(", ") || "Wi-Fi, Parking";
+  showLocationPicker.value = false;
+  propertyPhotos.value = [];
   hotelModal.value = true;
   error.value = "";
+}
+function choosePropertyLocation(point) {
+  hf.value.latitude = point.latitude;
+  hf.value.longitude = point.longitude;
+}
+function selectPropertyPhotos(event) {
+  const files = Array.from(event.target.files || []);
+  const invalid = files.find((file) =>
+    !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024,
+  );
+  if (invalid) {
+    error.value = "Choose JPG, PNG, or WebP photos up to 5 MB each.";
+    propertyPhotos.value = [];
+    event.target.value = "";
+    return;
+  }
+  error.value = "";
+  propertyPhotos.value = files;
 }
 function editFloor(f) {
   ff.value = f
@@ -117,13 +146,36 @@ function editFloor(f) {
         number: floors.value.length + 1,
         name: "",
         columns: 6,
+        plan_width_m: 30,
+        plan_height_m: 20,
       };
   floorModal.value = true;
   error.value = "";
 }
-function editRoom(room) {
+function roomPlan(room) {
+  return room.plan || { x: room.column * 5, y: room.row * 5, width: 5, height: 5, zones: [] };
+}
+function firstFreePlan() {
+  const size = 4;
+  for (let y = 0; y <= Number(floor.value.plan_height_m) - size; y += 1) {
+    for (let x = 0; x <= Number(floor.value.plan_width_m) - size; x += 1) {
+      const candidate = { x, y, width: size, height: size, zones: [] };
+      const occupied = floorRooms.value.some((room) => {
+        const other = roomPlan(room);
+        return x < other.x + other.width && other.x < x + size &&
+          y < other.y + other.height && other.y < y + size;
+      });
+      if (!occupied) return candidate;
+    }
+  }
+  return { x: 0, y: 0, width: size, height: size, zones: [] };
+}
+function editRoom(room, drawnPlan = null) {
+  const taken = new Set(floorRooms.value.map((item) => `${item.row},${item.column}`));
+  let slot = 0;
+  while (taken.has(`${Math.floor(slot / floor.value.columns)},${slot % floor.value.columns}`)) slot += 1;
   rf.value = room
-    ? { ...room }
+    ? { ...room, plan: { ...roomPlan(room), zones: [...(room.plan?.zones || [])] } }
     : {
         floor: floorId.value,
         number: "",
@@ -132,13 +184,62 @@ function editRoom(room) {
         price: 2500,
         capacity: 2,
         beds: "1 queen bed",
-        area: 28,
-        row: 0,
-        column: 0,
+        row: Math.floor(slot / floor.value.columns),
+        column: slot % floor.value.columns,
+        plan: drawnPlan || firstFreePlan(),
         active: true,
       };
+  roomPhoto.value = null;
+  if (roomPhotoInput.value) roomPhotoInput.value.value = "";
   roomModal.value = true;
   error.value = "";
+}
+function selectRoomPhoto(event) {
+  const file = event.target.files?.[0] || null;
+  if (file && (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+    roomPhoto.value = null;
+    event.target.value = "";
+    error.value = "Choose a JPG, PNG, or WebP room photo up to 5 MB.";
+    return;
+  }
+  roomPhoto.value = file;
+  error.value = "";
+}
+async function changeRoomPlan(room, plan) {
+  if (busy.value) return;
+  if (floor.value?.areas === undefined) {
+    error.value = "Restart the local Django server to enable named plan areas.";
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  try {
+    await api.patch(`rooms/${room.id}/`, { plan });
+    await details();
+    notice.value = `Room ${room.number} layout saved.`;
+  } catch (e) {
+    failure(e);
+  } finally {
+    busy.value = false;
+  }
+}
+async function changeFloorAreas(areas) {
+  if (busy.value || !floor.value) return;
+  if (floor.value.areas === undefined) {
+    error.value = "Restart the local Django server to enable named plan areas.";
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  try {
+    await api.patch(`floors/${floor.value.id}/`, { areas });
+    await details();
+    notice.value = "Floor area saved.";
+  } catch (e) {
+    failure(e);
+  } finally {
+    busy.value = false;
+  }
 }
 function editPromo(p) {
   pf.value = p
@@ -159,6 +260,19 @@ async function save(kind) {
   error.value = "";
   notice.value = "";
   try {
+    if (kind === "rooms" && !roomPhoto.value && !rf.value.photos?.length) {
+      error.value = "Add a room photo before saving this room.";
+      return;
+    }
+    if ((kind === "rooms" || kind === "floors") && floor.value && floor.value.areas === undefined) {
+      error.value = "Restart the local Django server to enable named plan areas.";
+      return;
+    }
+    if (kind === "hotels" && !hasPropertyLocation.value) {
+      error.value = "Choose the property's location on the map before saving.";
+      showLocationPicker.value = true;
+      return;
+    }
     const source =
       kind === "hotels"
         ? hf.value
@@ -176,7 +290,6 @@ async function save(kind) {
             "description",
             "latitude",
             "longitude",
-            "stars",
           ]
         : kind === "rooms"
           ? [
@@ -187,13 +300,13 @@ async function save(kind) {
               "price",
               "capacity",
               "beds",
-              "area",
+              "plan",
               "row",
               "column",
               "active",
             ]
           : kind === "floors"
-            ? ["hotel", "number", "name", "columns"]
+            ? ["hotel", "number", "name", "columns", "plan_width_m", "plan_height_m"]
             : ["hotel", "code", "percent", "starts_on", "ends_on", "active"];
     const payload = Object.fromEntries(fields.map((k) => [k, source[k]]));
     if (kind === "hotels")
@@ -204,7 +317,52 @@ async function save(kind) {
     const { data } = source.id
       ? await api.patch(`${kind}/${source.id}/`, payload)
       : await api.post(`${kind}/`, payload);
-    if (kind === "hotels") hotelId.value = data.id;
+    if (kind === "rooms" && roomPhoto.value) {
+      const photo = new FormData();
+      photo.append("room", data.id);
+      photo.append("image", roomPhoto.value);
+      try {
+        await api.post("room-photos/", photo);
+      } catch (uploadError) {
+        if (!source.id) {
+          try {
+            await api.delete(`rooms/${data.id}/`);
+          } catch {
+            error.value = `Photo upload failed. Room ${data.number} was created; open it and retry the photo. ${errorMessage(uploadError)}`;
+            await details();
+            return;
+          }
+        }
+        error.value = `Room photo could not upload. Please try again. ${errorMessage(uploadError)}`;
+        return;
+      }
+      roomPhoto.value = null;
+      if (roomPhotoInput.value) roomPhotoInput.value.value = "";
+    }
+    if (kind === "hotels") {
+      hotelId.value = data.id;
+      hf.value.id = data.id;
+      const failedPhotos = [];
+      let uploadError = "";
+      for (const file of propertyPhotos.value) {
+        const photo = new FormData();
+        photo.append("hotel", data.id);
+        photo.append("image", file);
+        try {
+          await api.post("hotel-photos/", photo);
+        } catch (e) {
+          failedPhotos.push(file);
+          uploadError ||= errorMessage(e);
+        }
+      }
+      propertyPhotos.value = failedPhotos;
+      if (failedPhotos.length) {
+        error.value = `Property saved, but ${failedPhotos.length} photo(s) could not upload. Try saving again. ${uploadError}`;
+        await load();
+        return;
+      }
+      if (propertyPhotoInput.value) propertyPhotoInput.value.value = "";
+    }
     hotelModal.value =
       roomModal.value =
       floorModal.value =
@@ -379,8 +537,7 @@ onMounted(load);
         <template v-if="floor"
           ><div class="section-heading">
             <p class="muted">
-              {{ floor.columns }} columns · {{ floorRooms.length }} rooms ·
-              positions start at row 0, column 0
+              {{ floor.plan_width_m }} m × {{ floor.plan_height_m }} m · {{ floorRooms.length }} rooms
             </p>
             <div class="inline-actions">
               <button class="text-button" @click="editFloor(floor)">
@@ -395,24 +552,16 @@ onMounted(load);
               </button>
             </div>
           </div>
-          <div class="owner-grid" :style="{ '--columns': floor.columns }">
-            <button
-              v-for="r in floorRooms"
-              :style="{ gridColumn: r.column + 1, gridRow: r.row + 1 }"
-              :class="{
-                inactive: !r.active,
-                booked: r.availability_status === 'booked',
-              }"
-              @click="editRoom(r)"
-            >
-              <strong>{{ r.number }}</strong
-              ><small>{{ r.kind }} · {{ money(r.price) }}</small
-              ><span>{{ roomStatus(r) }}</span>
-            </button>
-          </div>
+          <FloorPlanEditor
+            v-if="floor.plan_width_m != null && floor.plan_height_m != null && floor.areas !== undefined"
+            :key="floor.id" :floor="floor" :rooms="floorRooms" :busy="busy"
+            @draw-room="editRoom(null, $event)" @change-room="changeRoomPlan"
+            @change-floor="changeFloorAreas" @edit-room="editRoom"
+          />
+          <p v-else class="error" role="alert">Restart the local Django server to enable named plan areas.</p>
           <h3 class="room-inventory-title">Rooms on this floor</h3>
           <p class="muted">
-            Select a room in the plan to edit it, or use the actions below.
+            Draw rooms and named areas anywhere on the plan. Drag a box or its corner to adjust it.
             Rooms with booking history can be made unavailable instead of
             deleted.
           </p>
@@ -564,6 +713,7 @@ onMounted(load);
           <p class="muted">
             Saving property details submits it for administrator verification.
           </p>
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
           <label
             >Property name<input v-model="hf.name" required maxlength="160"
           /></label>
@@ -571,11 +721,6 @@ onMounted(load);
             <label>City<input :value="CITY_NAME" readonly /></label
             ><label>Province<input :value="PROVINCE_NAME" readonly /></label>
           </div>
-          <label
-            >Property category (1-5)<select v-model.number="hf.stars">
-              <option v-for="n in 5" :value="n">{{ n }}</option>
-            </select></label
-          >
           <label
             >Street / barangay in Calapan<input
               v-model="hf.address"
@@ -589,38 +734,35 @@ onMounted(load);
               rows="3"
             ></textarea>
           </label>
-          <div class="form-row">
-            <label
-              >Latitude<input
-                v-model.number="hf.latitude"
-                type="number"
-                step="0.000001"
-                min="-90"
-                max="90"
-                required /></label
-            ><label
-              >Longitude<input
-                v-model.number="hf.longitude"
-                type="number"
-                step="0.000001"
-                min="-180"
-                max="180"
-                required
-            /></label>
+          <div class="property-location-field">
+            <strong>Property location</strong>
+            <p class="muted">Choose your hotel's exact location in {{ LOCATION_LABEL }}. Tap the map or drag the pin.</p>
+            <button class="button secondary small" type="button" @click="showLocationPicker = !showLocationPicker">
+              {{ showLocationPicker ? "Hide map" : hasPropertyLocation ? "Change map pin" : "Choose on map" }}
+            </button>
+            <PropertyLocationPicker
+              v-if="showLocationPicker"
+              :latitude="hf.latitude"
+              :longitude="hf.longitude"
+              @choose="choosePropertyLocation"
+            />
+            <p v-if="hasPropertyLocation" class="muted">Pin selected: {{ Number(hf.latitude).toFixed(6) }}, {{ Number(hf.longitude).toFixed(6) }}</p>
+            <p v-else class="muted">No location selected yet.</p>
           </div>
-          <p class="muted">
-            Listings must be physically located in {{ LOCATION_LABEL }}. Set
-            your property's actual map coordinates for administrator
-            verification.
-          </p>
           <label
             >Amenities (comma-separated)<input
               v-model="amenitiesText"
               placeholder="Wi-Fi, Pool, Breakfast" /></label
-          ><button class="button full" :disabled="busy">Save property</button>
+          >
+          <label>Hotel photos (optional, up to 5 MB each)
+            <input ref="propertyPhotoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple @change="selectPropertyPhotos" />
+          </label>
+          <p v-if="propertyPhotos.length" class="muted">{{ propertyPhotos.length }} photo(s) selected: {{ propertyPhotos.map((file) => file.name).join(", ") }}</p>
+          <button class="button full" :disabled="busy">{{ busy ? "Saving..." : "Save property" }}</button>
         </form>
         <form v-else-if="floorModal" @submit.prevent="save('floors')">
           <h2>{{ ff.id ? "Edit" : "Add" }} floor</h2>
+          <p class="muted">Enter the floor's measured width and length. Existing rooms use approximate boxes until you set their sizes.</p>
           <label
             >Floor name<input v-model="ff.name" required maxlength="80"
           /></label>
@@ -633,18 +775,21 @@ onMounted(load);
                 max="100"
                 required /></label
             ><label
-              >Layout columns<input
+              >Floor width (m)<input
                 type="number"
-                v-model.number="ff.columns"
-                min="1"
-                max="12"
+                v-model.number="ff.plan_width_m"
+                min="5"
+                max="200"
+                step="0.01"
                 required
             /></label>
           </div>
+          <label>Floor length (m)<input type="number" v-model.number="ff.plan_height_m" min="5" max="200" step="0.01" required /></label>
           <button class="button full" :disabled="busy">Save floor</button>
         </form>
         <form v-else-if="roomModal" @submit.prevent="save('rooms')">
           <h2>{{ rf.id ? "Edit" : "Add" }} room</h2>
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
           <div class="form-row">
             <label
               >Room number<input
@@ -681,33 +826,27 @@ onMounted(load);
                 required
             /></label>
           </div>
-          <div class="form-row">
-            <label
-              >Beds<input v-model="rf.beds" maxlength="80" required /></label
-            ><label
-              >Area (m?)<input
-                type="number"
-                min="1"
-                v-model.number="rf.area"
-                required
-            /></label>
+          <label>Beds<input v-model="rf.beds" maxlength="80" required /></label>
+          <div class="room-photo-field">
+            <div>
+              <strong>Room photo <span v-if="!rf.photos?.length">required</span></strong>
+              <p>Show guests the room they will book. JPG, PNG, or WebP, up to 5 MB.</p>
+            </div>
+            <img v-if="rf.photos?.length" :src="rf.photos[0].image" :alt="`Current photo of room ${rf.number}`" />
+            <label>
+              {{ rf.photos?.length ? "Add another photo" : "Choose a room photo" }}
+              <input ref="roomPhotoInput" type="file" accept="image/jpeg,image/png,image/webp" :required="!rf.photos?.length && !roomPhoto" @change="selectRoomPhoto" />
+            </label>
+            <small v-if="roomPhoto">Ready to upload: {{ roomPhoto.name }}</small>
           </div>
           <div class="form-row">
-            <label
-              >Grid row (0?30)<input
-                type="number"
-                min="0"
-                max="30"
-                v-model.number="rf.row"
-                required /></label
-            ><label
-              >Grid column (0?{{ floor?.columns - 1 }})<input
-                type="number"
-                min="0"
-                :max="floor?.columns - 1"
-                v-model.number="rf.column"
-                required
-            /></label>
+            <label>Room width (m)<input type="number" min="1" step="0.01" v-model.number="rf.plan.width" required /></label>
+            <label>Room length (m)<input type="number" min="1" step="0.01" v-model.number="rf.plan.height" required /></label>
+          </div>
+          <p class="muted">Measured area: {{ Number((rf.plan?.width || 0) * (rf.plan?.height || 0)).toFixed(2) }} m²</p>
+          <div class="form-row">
+            <label>From left (m)<input type="number" min="0" step="0.01" v-model.number="rf.plan.x" required /></label>
+            <label>From top (m)<input type="number" min="0" step="0.01" v-model.number="rf.plan.y" required /></label>
           </div>
           <label class="checkbox-label"
             ><input type="checkbox" v-model="rf.active" />Room is active and
@@ -797,3 +936,9 @@ onMounted(load);
     </div>
   </section>
 </template>
+
+<style scoped>
+.property-location-field { display: grid; gap: .6rem; margin: 1rem 0; }
+.property-location-field p { margin: 0; }
+.property-location-field > button { justify-self: start; }
+</style>

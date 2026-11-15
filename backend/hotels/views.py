@@ -76,12 +76,6 @@ class HotelViewSet(SafeDestroyMixin, viewsets.ModelViewSet):
             )
         if p.get("city"):
             q = q.filter(city__icontains=p["city"])
-        if p.get("stars"):
-            try:
-                stars = int(p["stars"])
-            except ValueError:
-                raise ValidationError("Stars must be an integer.")
-            q = q.filter(stars__gte=stars)
         for amenity in p.get("amenities", "").split(","):
             if amenity.strip():
                 q = q.filter(amenities__icontains=amenity.strip())
@@ -94,7 +88,7 @@ class HotelViewSet(SafeDestroyMixin, viewsets.ModelViewSet):
                 bookings__in=__import__(
                     "bookings.models", fromlist=["Booking"]
                 ).Booking.objects.filter(
-                    status="confirmed", check_in__lt=end, check_out__gt=start
+                    status__in=["pending", "confirmed"], check_in__lt=end, check_out__gt=start
                 )
             )
         for key, lookup in [

@@ -19,9 +19,11 @@ class Booking(models.Model):
     promotion_code = models.CharField(max_length=32, blank=True)
     status = models.CharField(
         max_length=12,
-        choices=[("confirmed", "Confirmed"), ("cancelled", "Cancelled")],
-        default="confirmed",
+        choices=[("pending", "Pending owner approval"), ("confirmed", "Confirmed"), ("rejected", "Rejected"), ("cancelled", "Cancelled")],
+        default="pending",
     )
+    checked_out_at = models.DateTimeField(null=True, blank=True)
+    cancellation_requested_at = models.DateTimeField(null=True, blank=True)
     special_requests = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -39,4 +41,27 @@ class Booking(models.Model):
             models.CheckConstraint(
                 check=models.Q(guests__gte=1), name="booking_positive_guests"
             ),
+        ]
+
+
+class BookingMessage(models.Model):
+    booking = models.ForeignKey(
+        Booking, on_delete=models.CASCADE, related_name="messages"
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="booking_messages",
+    )
+    message = models.TextField(max_length=2000)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(
+                fields=["booking", "created_at"],
+                name="bookings_bo_booking_fbd761_idx",
+            )
         ]

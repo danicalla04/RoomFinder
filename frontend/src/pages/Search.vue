@@ -30,7 +30,6 @@ const form = ref({
   guests: 2,
   min_price: "",
   max_price: "",
-  stars: "",
   rating: "",
   sort: "newest",
   amenities: [],
@@ -188,11 +187,6 @@ onMounted(() => load());
           v-model="form.max_price"
           placeholder="Any" /></label
       ><label
-        >Property category<select v-model="form.stars">
-          <option value="">Any stars</option>
-          <option v-for="n in [3, 4, 5]" :value="n">{{ n }}+ stars</option>
-        </select></label
-      ><label
         >Guest rating<select v-model="form.rating">
           <option value="">Any rating</option>
           <option value="4">4+ stars</option>
@@ -214,14 +208,6 @@ onMounted(() => load());
       </div>
       <button class="button small">Apply filters</button>
     </form>
-    <details v-if="filters" class="classification-help">
-      <summary>What do property stars mean?</summary>
-      <p>
-        Stars (1-5) are the owner's property category. They are separate from
-        guest review scores and do not certify official accreditation. Sample
-        hotel categories are demonstration data.
-      </p>
-    </details>
     <p class="error" v-if="error" role="alert">{{ error }}</p>
     <div class="results-caption">
       <span>{{

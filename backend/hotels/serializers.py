@@ -46,7 +46,6 @@ class HotelSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "amenities",
-            "stars",
             "status",
             "verification_note",
             "photos",

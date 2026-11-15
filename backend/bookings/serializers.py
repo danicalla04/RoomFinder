@@ -1,24 +1,44 @@
 from rest_framework import serializers
-from .models import Booking
+from .models import Booking, BookingMessage
 from .demo import DEMO_PREFIX
-from payments.models import Payment
-
-
-class PaymentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Payment
-        fields = ["id", "reference", "amount", "method", "status", "created_at"]
+from django.utils import timezone
+from datetime import timedelta
+from decimal import Decimal
 
 
 class BookingSerializer(serializers.ModelSerializer):
     guests = serializers.IntegerField(min_value=1, default=1)
-    payment = PaymentSerializer(read_only=True)
     hotel_name = serializers.CharField(source="room.floor.hotel.name", read_only=True)
     room_number = serializers.CharField(source="room.number", read_only=True)
     customer_name = serializers.CharField(source="customer.username", read_only=True)
     reviewed = serializers.SerializerMethodField()
     is_demo = serializers.SerializerMethodField()
     customer_display_name = serializers.SerializerMethodField()
+    cancel_deadline = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
+    can_request_cancellation = serializers.SerializerMethodField()
+    cancellation_requested = serializers.SerializerMethodField()
+
+    def get_cancel_deadline(self, obj):
+        return obj.created_at + timedelta(hours=2)
+
+    def get_can_cancel(self, obj):
+        return (
+            obj.status == "pending"
+            and timezone.now() < self.get_cancel_deadline(obj)
+            and obj.check_in > timezone.localdate()
+        )
+
+    def get_can_request_cancellation(self, obj):
+        return (
+            obj.status == "confirmed"
+            and not obj.checked_out_at
+            and obj.check_out > timezone.localdate()
+            and not obj.cancellation_requested_at
+        )
+
+    def get_cancellation_requested(self, obj):
+        return bool(obj.cancellation_requested_at)
 
     def get_customer_display_name(self, obj):
         return obj.customer.get_full_name() or obj.customer.username
@@ -49,7 +69,11 @@ class BookingSerializer(serializers.ModelSerializer):
             "status",
             "special_requests",
             "created_at",
-            "payment",
+            "checked_out_at",
+            "cancel_deadline",
+            "can_cancel",
+            "can_request_cancellation",
+            "cancellation_requested",
             "reviewed",
             "is_demo",
         ]
@@ -60,6 +84,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "discount",
             "status",
             "created_at",
+            "checked_out_at",
         ]
 
     def validate(self, data):
@@ -81,3 +106,23 @@ class BookingSerializer(serializers.ModelSerializer):
                 "This room is not accepting reservations."
             )
         return data
+
+
+class BookingMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BookingMessage
+        fields = ["id", "booking", "sender", "sender_name", "message", "created_at", "read_at"]
+        read_only_fields = ["id", "booking", "sender", "sender_name", "created_at", "read_at"]
+
+    def get_sender_name(self, obj):
+        return obj.sender.get_full_name() or obj.sender.username
+
+    def validate_message(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Write a message before sending.")
+        if len(value) > 2000:
+            raise serializers.ValidationError("Messages must be 2,000 characters or fewer.")
+        return value
