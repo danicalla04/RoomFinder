@@ -20,6 +20,17 @@ const accountSearch = ref("");
 const editTarget = ref(null);
 const editForm = ref({});
 const ownerTab = ref("all");
+const showCreateForm = ref(false);
+const creating = ref(false);
+const createForm = ref({
+  role: "customer",
+  first_name: "",
+  last_name: "",
+  username: "",
+  email: "",
+  phone: "",
+  password: "",
+});
 const customerPage = ref(1);
 const customersPerPage = 5;
 const owners = computed(() => users.value.filter((user) => user.role === "owner"));
@@ -51,6 +62,25 @@ async function load() {
     error.value = errorMessage(e);
   } finally {
     loading.value = false;
+  }
+}
+
+async function createAccount() {
+  creating.value = true;
+  error.value = "";
+  notice.value = "";
+  try {
+    const created = (await api.post("admin/users/", createForm.value)).data;
+    showCreateForm.value = false;
+    createForm.value = { role: "customer", first_name: "", last_name: "", username: "", email: "", phone: "", password: "" };
+    sessionStorage.removeItem("rf_admin_users");
+    customerPage.value = 1;
+    notice.value = `${created.role === "owner" ? "Hotel owner" : "User"} ${created.username} created. The account is active and no verification email was sent.`;
+    await load();
+  } catch (e) {
+    error.value = errorMessage(e);
+  } finally {
+    creating.value = false;
   }
 }
 
@@ -204,6 +234,22 @@ onMounted(load);
     <article class="panel account-management" v-if="!loading">
       <h2>Manage owners & users</h2>
       <p class="muted">Edit account details, review owner access, or delete accounts here. These actions are separate from the read-only lists above.</p>
+      <button class="button small" type="button" @click="showCreateForm = !showCreateForm">{{ showCreateForm ? "Close form" : "Create account" }}</button>
+      <form v-if="showCreateForm" class="account-create-form" @submit.prevent="createAccount">
+        <h3>Create an account without email verification</h3>
+        <p class="muted">The account will be active immediately. No verification email is sent. Share the temporary password with the person privately.</p>
+        <label>Account type
+          <select v-model="createForm.role">
+            <option value="customer">Traveler / user</option>
+            <option value="owner">Hotel owner (approved)</option>
+          </select>
+        </label>
+        <div class="form-row"><label>First name<input v-model.trim="createForm.first_name" maxlength="150" required /></label><label>Last name<input v-model.trim="createForm.last_name" maxlength="150" required /></label></div>
+        <div class="form-row"><label>Username<input v-model.trim="createForm.username" autocomplete="off" maxlength="150" required /></label><label>Email<input v-model.trim="createForm.email" type="email" autocomplete="off" required /></label></div>
+        <label>Phone (optional)<input v-model.trim="createForm.phone" maxlength="30" /></label>
+        <label>Temporary password<input v-model="createForm.password" type="password" autocomplete="new-password" minlength="8" required /><small>At least 8 characters and must pass the site’s password rules.</small></label>
+        <button class="button small" type="submit" :disabled="creating">{{ creating ? "Creating account..." : "Create account" }}</button>
+      </form>
       <div class="tabs owner-tabs" aria-label="Choose accounts to manage">
         <button type="button" :class="{ active: manageTab === 'owners' }" @click="manageTab = 'owners'; accountSearch = ''">Manage owners ({{ owners.length }})</button>
         <button type="button" :class="{ active: manageTab === 'users' }" @click="manageTab = 'users'; accountSearch = ''">Manage users ({{ customers.length }})</button>
@@ -257,6 +303,10 @@ onMounted(load);
 .delete-account-button:hover { background: #842f27; }
 .delete-account-button:disabled { opacity: .5; cursor: not-allowed; }
 .account-management { margin-top: 1.5rem; }
+.account-create-form { display: grid; gap: .8rem; max-width: 42rem; margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid #d8e1d1; border-radius: .5rem; }
+.account-create-form h3, .account-create-form p { margin: 0; }
+.account-create-form label { display: grid; gap: .35rem; }
+.account-create-form small { color: #75816f; }
 .account-search { display: block; max-width: 28rem; margin: 1rem 0; }
 .manage-account-row { padding: 1rem 0; border-top: 1px solid #e1e5d9; }
 .manage-account-summary, .account-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }

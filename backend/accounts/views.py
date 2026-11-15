@@ -13,6 +13,7 @@ from .serializers import (
     UserSerializer,
     RoleTokenObtainPairSerializer,
     AdminUserUpdateSerializer,
+    AdminCreateAccountSerializer,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User
@@ -155,6 +156,26 @@ class AdminUsersView(APIView):
             }
             for user in users
         ])
+
+    def post(self, request):
+        serializer = AdminCreateAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "display_name": user.get_full_name() or user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role,
+            "is_active": user.is_active,
+            "email_verified": bool(user.email_verified_at),
+            "owner_approval_status": user.owner_approval_status if user.role == User.Role.OWNER else None,
+            "hotels": [],
+            "date_joined": user.date_joined,
+        }, status=status.HTTP_201_CREATED)
 
 
 class AdminUserDetailView(APIView):

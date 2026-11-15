@@ -25,6 +25,20 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
         fields = ["first_name", "last_name", "phone"]
 
 
+class AdminCreateAccountSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    role = serializers.ChoiceField(choices=[User.Role.CUSTOMER, User.Role.OWNER])
+
+    class Meta:
+        model = User
+        fields = ["username", "email", "password", "first_name", "last_name", "phone", "role"]
+
+    def create(self, validated_data):
+        if validated_data["role"] == User.Role.OWNER:
+            validated_data["owner_approval_status"] = User.OwnerApproval.APPROVED
+        return User.objects.create_user(**validated_data, is_active=True)
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     role = serializers.ChoiceField(choices=["customer", "owner"], default="customer")
