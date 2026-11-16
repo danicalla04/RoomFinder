@@ -14,12 +14,6 @@ The Android app will package the Vue frontend; Railway runs only the Django API.
 
 If Railway reports that it detected npm and has no start command, deploy the latest commit: it contains the repository-root Dockerfile that prevents Railway from treating this project as an npm service.
 
-## Deploy the website and API on Render
-
-The root `render.yaml` Blueprint creates a Django Docker web service and a Vue static site. From the Render dashboard choose **New > Blueprint**, connect this repository, and select the `main` branch. During Blueprint setup, enter the Neon PostgreSQL connection string for `DATABASE_URL`; Render generates `SECRET_KEY`. The static site is built from `frontend/` and uses the API URL in the Blueprint. After both services deploy, check `https://roomfinder-api.onrender.com/api/v1/health/` and open `https://roomfinder-frontend.onrender.com/`.
-
-This setup uses Neon for database storage. Render's free web service may sleep when idle, and uploaded hotel/room photos need persistent or external media storage before relying on them across deployments. Add `ORS_API_KEY` to the API service environment if you want hosted walking-route responses.
-
 ## Build the Android test app
 
 The Android package uses the existing Vue frontend through Capacitor. Ionic Vue UI components can be added later without rebuilding the screens first. The backend remains on Railway and the data remains in Neon.
