@@ -1,7 +1,6 @@
 from pathlib import Path
 import os
 import sys
-from email.utils import formataddr, parseaddr
 from urllib.parse import parse_qs, unquote, urlparse
 from dotenv import load_dotenv
 
@@ -173,32 +172,7 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(os.getenv("ROOMFINDER_MEDIA_ROOT", str(BASE_DIR / "media")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-if EMAIL_PROVIDER == "resend":
-    INSTALLED_APPS.append("anymail")
-    EMAIL_BACKEND = "config.resend_backend.ResendEmailBackend"
-    ANYMAIL = {"RESEND_API_KEY": RESEND_API_KEY}
-    # The verification helper also checks these legacy fields before calling
-    # Django's email backend. They are sent nowhere when Anymail is active.
-    EMAIL_HOST_USER = EMAIL_HOST_USER or "resend-api"
-    EMAIL_HOST_PASSWORD = EMAIL_HOST_PASSWORD or "resend-api"
-else:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
-    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-    EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
-    EMAIL_USE_TLS = True
 ORS_API_KEY = os.getenv("ORS_API_KEY", "")
-default_sender = "onboarding@resend.dev" if EMAIL_PROVIDER == "resend" else EMAIL_HOST_USER
-configured_from_email = os.getenv("DEFAULT_FROM_EMAIL", "").strip() or default_sender
-_, sender_email_address = parseaddr(configured_from_email)
-if not sender_email_address:
-    sender_email_address = default_sender
-DEFAULT_FROM_EMAIL = formataddr(("RoomFinder", sender_email_address))
-SERVER_EMAIL = DEFAULT_FROM_EMAIL
 ROOMFINDER_PUBLIC_URL = os.getenv("ROOMFINDER_PUBLIC_URL", "http://localhost:5173")
 
 REST_FRAMEWORK["URL_FORMAT_OVERRIDE"] = None

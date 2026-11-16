@@ -7,12 +7,18 @@ A hotel discovery and exact-room reservation application for Calapan City, Orien
 The Android app will package the Vue frontend; Railway runs only the Django API.
 
 1. In Railway, create a service from this GitHub repository. The repository-root Dockerfile builds the Django API automatically. If the service's **Root Directory** is set to `/backend`, the Dockerfile in that folder builds the same API.
-2. In **Variables**, set `DATABASE_URL` to the Neon PostgreSQL connection URL, `SECRET_KEY` to a new random secret, and `ROOMFINDER_DEBUG=False`. Do not commit these values. For new account registration, also set `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL` so verification emails can be sent.
+2. In **Variables**, set `DATABASE_URL` to the Neon PostgreSQL connection URL, `SECRET_KEY` to a new random secret, and `ROOMFINDER_DEBUG=False`. Do not commit these values. No email-sending configuration is needed for registration.
 3. In **Settings > Networking**, generate a public HTTPS domain. Railway supplies `RAILWAY_PUBLIC_DOMAIN`, which Django adds to its allowed hosts automatically. If using a custom domain, set `ROOMFINDER_ALLOWED_HOSTS` to that hostname and `ROOMFINDER_CSRF_TRUSTED_ORIGINS` to its HTTPS origin.
 4. Attach a Railway volume to the service at `/app/media` before uploading photos. Without the volume, uploaded hotel and room photos are lost when the service is replaced. Existing local photos are not copied to Railway automatically.
 5. Open `https://YOUR-RAILWAY-DOMAIN/api/v1/health/`. A successful response reports the connected database. When building the Android frontend, set `VITE_API_BASE_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/` and rebuild the Vue bundle.
 
 If Railway reports that it detected npm and has no start command, deploy the latest commit: it contains the repository-root Dockerfile that prevents Railway from treating this project as an npm service.
+
+## Deploy the website and API on Render
+
+The root `render.yaml` Blueprint creates a Django Docker web service and a Vue static site. From the Render dashboard choose **New > Blueprint**, connect this repository, and select the `main` branch. During Blueprint setup, enter the Neon PostgreSQL connection string for `DATABASE_URL`; Render generates `SECRET_KEY`. The static site is built from `frontend/` and uses the API URL in the Blueprint. After both services deploy, check `https://roomfinder-api.onrender.com/api/v1/health/` and open `https://roomfinder-frontend.onrender.com/`.
+
+This setup uses Neon for database storage. Render's free web service may sleep when idle, and uploaded hotel/room photos need persistent or external media storage before relying on them across deployments. Add `ORS_API_KEY` to the API service environment if you want hosted walking-route responses.
 
 ## Build the Android test app
 
@@ -31,7 +37,7 @@ npx cap sync android
 npx cap open android
 ```
 
-In Android Studio, build an APK for testing and transfer the file to the phone through a download link or cloud drive. After changing Vue code or `frontend/.env.android`, run `npm run build:android` and `npx cap sync android` before building the next APK. The APK needs internet to reach the API. New account registration also needs the Railway SMTP variables documented above.
+In Android Studio, build an APK for testing and transfer the file to the phone through a download link or cloud drive. After changing Vue code or `frontend/.env.android`, run `npm run build:android` and `npx cap sync android` before building the next APK. The APK needs internet to reach the API.
 
 Alternatively, open the repository's **Actions** tab on GitHub, choose **Android test APK**, and run the workflow. It reports the hosted API status, builds a debug APK with Capacitor, prints its SHA-256 checksum, and uploads it as the **RoomFinder-Android-reviewable** artifact. The Android JavaScript is built without minification so its contents can be inspected. Download the artifact ZIP, extract `app-debug.apk`, and install it on the Android phone only after the file passes the device's security checks. The APK does not need USB debugging or the development computer to stay on, but it does need the hosted API to remain available.
 
@@ -144,10 +150,10 @@ Database tests use a separate `test_roomfinder_db` and include real concurrent c
 
 For Neon PostgreSQL, run `neon deploy` from the RoomFinder root. It pulls `DATABASE_URL` into `.env.local` (or `.env`); Django reads either file before `backend/.env`. The URL takes precedence over local MySQL settings. Run `./scripts/setup.ps1` to install the maintained Python dependencies and apply Django migrations, then `./scripts/start.ps1 -Environment .venv-modern`. Neon tables and queries are available in the project's Tables and SQL Editor pages in the Neon Console. Existing MySQL records require a separate data migration.
 
-New customer and owner registrations send a six-digit verification code by SMTP. Enter it on `/verify-email` within 3 minutes after the email is sent; another code can be requested after 60 seconds. Five incorrect attempts require a new code. Configure `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL` in the ignored `backend/.env`; see `backend/.env.example`. New accounts cannot sign in until verified. Existing accounts remain active. Verified email addresses are read-only in the profile until an email-change verification flow is added.
+New customer accounts are active immediately after registration. New hotel-owner accounts can sign in after registration, but owner tools remain unavailable until an administrator approves the owner request.
 
-New hotel-owner accounts require administrator approval after email verification. An administrator opens `/admin/users` to review pending owners and approve or decline them. Existing owner accounts are approved by default during migration.
-New customers can sign in only after email verification, without administrator approval; new owners also need administrator approval. An unverified new account receives a verification reminder at sign-in and no access token. Older active demo accounts predate email verification and remain usable, including accounts with `roomfinder.test` addresses. The admin Users page has separate hotel owner and user sections, shows "None yet" for empty lists, and lets administrators open each owner's property, select a floor, and select a room to see its details, photos, and reservations. Reservation lists narrow to the selected floor or room and include booking and payment status. Pending owners cannot create a hotel through the API. Returning sessions display the cached account and user list while the app refreshes them from the server.
+New hotel-owner accounts require administrator approval. An administrator opens `/admin/users` to review pending owners and approve or decline them. Existing owner accounts are approved by default during migration.
+New customer accounts are active immediately after registration. New owners also need administrator approval before using owner features. The account lists show owner approval status and active/inactive state. The admin Users page has separate hotel owner and user sections, shows "None yet" for empty lists, and lets administrators open each owner's property, select a floor, and select a room to see its details, photos, and reservations. Reservation lists narrow to the selected floor or room and include booking and payment status. Pending owners cannot create a hotel through the API. Returning sessions display the cached account and user list while the app refreshes them from the server.
 
 JWTs are stored in sessionStorage and refreshed once when expired. Sign out clears them. For an internet deployment use a maintained database/framework stack, HTTPS, restricted hosts, production secret management, durable private media handling as appropriate, and a production WSGI server; these development scripts bind only to loopback.
 

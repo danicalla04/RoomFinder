@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.db import connection
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
-from accounts.views import RegisterView, MeView, RoleTokenObtainPairView, VerifyEmailView, ResendVerificationView, AdminUsersView, AdminUserDetailView, ReviewOwnerView, AdminHotelOverviewView
+from accounts.views import RegisterView, MeView, RoleTokenObtainPairView, AdminUsersView, AdminUserDetailView, ReviewOwnerView, AdminHotelOverviewView
 from hotels.views import HotelViewSet, HotelPhotoViewSet
 from rooms.views import FloorViewSet, RoomViewSet, RoomPhotoViewSet
 from bookings.views import BookingViewSet
@@ -46,8 +46,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/health/", health),
     path("api/v1/auth/register/", RegisterView.as_view()),
-    path("api/v1/auth/verify-email/", VerifyEmailView.as_view()),
-    path("api/v1/auth/resend-verification/", ResendVerificationView.as_view()),
     path("api/v1/admin/users/", AdminUsersView.as_view()),
     path("api/v1/admin/users/<int:pk>/", AdminUserDetailView.as_view()),
     path("api/v1/admin/users/<int:pk>/review/", ReviewOwnerView.as_view()),

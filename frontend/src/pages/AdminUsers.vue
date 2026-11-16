@@ -75,7 +75,7 @@ async function createAccount() {
     createForm.value = { role: "customer", first_name: "", last_name: "", username: "", email: "", phone: "", password: "" };
     sessionStorage.removeItem("rf_admin_users");
     customerPage.value = 1;
-    notice.value = `${created.role === "owner" ? "Hotel owner" : "User"} ${created.username} created. The account is active and no verification email was sent.`;
+    notice.value = `${created.role === "owner" ? "Hotel owner" : "User"} ${created.username} created. The account is active.`;
     await load();
   } catch (e) {
     error.value = errorMessage(e);
@@ -189,7 +189,6 @@ onMounted(load);
           <strong>{{ user.display_name || user.username }}</strong>
           <span class="badge owner-status" :class="user.owner_approval_status">{{ user.owner_approval_status }}</span>
           <p>{{ user.email }}</p>
-          <small>{{ user.email_verified ? "Email verified" : "Waiting for email verification" }}</small>
           <div v-if="user.hotels.length">
             <p v-for="hotel in user.hotels" :key="hotel.id">
               <RouterLink class="button secondary small" :to="`/admin/hotels/${hotel.id}`">Open {{ hotel.name }}</RouterLink>
@@ -213,7 +212,7 @@ onMounted(load);
             <tr v-for="user in visibleCustomers" :key="user.id">
                 <td>{{ user.display_name || user.username }}</td>
                 <td>{{ user.email }}</td>
-                <td>{{ user.is_active ? "active" : "unverified" }}</td>
+                <td>{{ user.is_active ? "active" : "inactive" }}</td>
               </tr>
           </tbody>
         </table>
@@ -236,8 +235,8 @@ onMounted(load);
       <p class="muted">Edit account details, review owner access, or delete accounts here. These actions are separate from the read-only lists above.</p>
       <button class="button small" type="button" @click="showCreateForm = !showCreateForm">{{ showCreateForm ? "Close form" : "Create account" }}</button>
       <form v-if="showCreateForm" class="account-create-form" @submit.prevent="createAccount">
-        <h3>Create an account without email verification</h3>
-        <p class="muted">The account will be active immediately. No verification email is sent. Share the temporary password with the person privately.</p>
+        <h3>Create an account</h3>
+        <p class="muted">The account is active immediately. Share the temporary password with the person privately.</p>
         <label>Account type
           <select v-model="createForm.role">
             <option value="customer">Traveler / user</option>
@@ -262,7 +261,7 @@ onMounted(load);
           <div class="account-actions">
             <button class="button secondary small" type="button" :disabled="deleting || busyId !== null" @click="startEdit(user)">Edit details</button>
             <template v-if="manageTab === 'owners'">
-              <button v-if="user.owner_approval_status !== 'approved'" class="button small" type="button" :disabled="busyId !== null || !user.email_verified" @click="review(user, 'approved')">Approve owner</button>
+              <button v-if="user.owner_approval_status !== 'approved'" class="button small" type="button" :disabled="busyId !== null" @click="review(user, 'approved')">Approve owner</button>
               <button v-if="user.owner_approval_status === 'pending'" class="button secondary small" type="button" :disabled="busyId !== null" @click="review(user, 'rejected')">Reject owner</button>
             </template>
             <button class="button secondary small delete-link" type="button" :disabled="deleting || busyId !== null" @click="startDelete(user)">Delete</button>
@@ -270,7 +269,7 @@ onMounted(load);
         </div>
         <form v-if="editTarget === user.id" class="account-edit-form" @submit.prevent="saveEdit(user)">
           <div class="form-row"><label>First name<input v-model="editForm.first_name" maxlength="150" /></label><label>Last name<input v-model="editForm.last_name" maxlength="150" /></label></div>
-          <p class="muted">Email: {{ user.email }} (managed separately to preserve verification)</p>
+          <p class="muted">Email: {{ user.email }}</p>
           <label>Phone<input v-model="editForm.phone" maxlength="30" /></label>
           <div class="delete-actions"><button class="button small" type="submit" :disabled="busyId !== null">Save account details</button><button class="button secondary small" type="button" @click="editTarget = null">Cancel</button></div>
         </form>

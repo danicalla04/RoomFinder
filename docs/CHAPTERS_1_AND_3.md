@@ -18,7 +18,7 @@ Conventional hotel discovery and reservation workflows often split property info
 
 RoomFinder addresses these workflow concerns in a defined local setting. Calapan City is fixed as the service area in the customer search and hotel-management forms. The backend and database reject hotels outside that city. Search filters cover travel dates, guest count, room price, property category, guest rating, and amenities. The floor layout links each selectable position to an actual room record. Availability is checked against the requested date range, room capacity, active status, and confirmed reservations. These checks are repeated on the server when the booking is submitted, so a client-side display alone does not authorize a reservation.
 
-The project uses three account roles. A customer may reserve, cancel within the allowed time, review a completed stay, and see private notifications. A hotel owner may maintain only the owner's properties and related inventory. An administrator may review property submissions and access Calapan-wide management information. New customer and owner registrations use email verification, and new owner accounts require administrator approval. This role structure helps separate public discovery from privileged changes to room stock and property visibility.
+The project uses three account roles. A customer may reserve, cancel within the allowed time, review a completed stay, and see private notifications. A hotel owner may maintain only the owner's properties and related inventory. An administrator may review property submissions and access Calapan-wide management information. Customer accounts become active at registration; new owner accounts require administrator approval before owner tools are available. This role structure helps separate public discovery from privileged changes to room stock and property visibility.
 
 The initial deployment and verification are local. Sample hotels, photos, reservations, and simulated payments illustrate system behavior; they are not a claim that the sample properties are operating businesses. The present study concerns the design and functional validation of the application, rather than commercial performance or actual payment settlement.
 
@@ -44,7 +44,7 @@ To design, develop, and functionally evaluate RoomFinder as a Calapan City hotel
 
 ### Specific Objectives
 
-1. Provide a role-aware account workflow with registration, email verification, login, and access control.
+1. Provide a role-aware account workflow with registration, login and access control.
 2. Provide Calapan-only hotel discovery, filtering, comparison, property details, map locations, photos, and verified guest reviews.
 3. Present floors and actual rooms in a visual layout with date-sensitive availability and capacity information.
 4. Reserve one specific room per booking, calculate a Philippine peso total from nightly price and eligible promotion, and prevent overlapping confirmed reservations.
@@ -69,7 +69,7 @@ Future developers and researchers may use the application as a reference for rol
 
 The application covers hotels entered for Calapan City, Oriental Mindoro. It supports customer, hotel-owner, and administrator roles; discovery and comparison; property and room photos; exact-room selection; one-room reservations for one to thirty nights; promotions; simulated payment approval; eligible cancellation; reviews after completed stays; private notifications; owner inventory and reports; and administrator verification. The map shows hotel pins using online map data. The frontend is built with Vue 3 and Vite; the backend uses Django REST Framework and a relational database. A Neon PostgreSQL development profile and a local MariaDB compatibility profile are available.
 
-The project does not include a real payment gateway, card processing, guaranteed room fulfillment by a real hotel, or public deployment. The local sample properties and activity are illustrative. Map tiles require internet access. The application does not certify that an entered hotel coordinate is within a surveyed Calapan boundary; an administrator must verify a real address and coordinate before public use. Availability changes appear after an API refresh rather than a push subscription. Email verification requires configured SMTP credentials.
+The project does not include a real payment gateway, card processing, guaranteed room fulfillment by a real hotel, or public deployment. The local sample properties and activity are illustrative. Map tiles require internet access. The application does not certify that an entered hotel coordinate is within a surveyed Calapan boundary; an administrator must verify a real address and coordinate before public use. Availability changes appear after an API refresh rather than a push subscription. Account registration does not send email-verification messages.
 
 The proposed in-app AR guide, road-by-road arrows, five-kilometer activation rule, native Android package, routing-provider integration, and on-street positioning tests have not been implemented in the current system. They are described as future work, not as validated results. A straight-line arrow to a hotel would not by itself constitute safe walking directions.
 
@@ -139,7 +139,7 @@ The hotel model stores Calapan location details and coordinates. Floors and room
 
 ## 3.7 Core Workflow Procedures
 
-Account access begins with registration or role-aware login. New accounts verify their email before sign-in, and new owner accounts wait for administrator approval. After login, routing sends customers to discovery and owners or administrators to their dashboards. Backend authorization independently checks every protected request; changing the visible role selector does not change the stored role.
+Account access begins with registration or role-aware login. New customer accounts are active after registration, while new owner accounts wait for administrator approval before using owner features. After login, routing sends customers to discovery and owners or administrators to their dashboards. Backend authorization independently checks every protected request; changing the visible role selector does not change the stored role.
 
 Hotel publication begins when an owner submits or changes property details. The record becomes pending until an administrator verifies or rejects it. Only verified properties appear in customer discovery. An owner can manage only records under the owner's own hotel.
 

@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.utils import timezone
 
 from accounts.models import User
 from hotels.models import Hotel, HotelPhoto
@@ -56,11 +55,10 @@ class Command(BaseCommand):
             owner.email = spec["email"]
             owner.role = User.Role.OWNER
             owner.owner_approval_status = User.OwnerApproval.APPROVED
-            owner.email_verified_at = owner.email_verified_at or timezone.now()
             owner.is_active = True
             owner.first_name = "Test Owner"
             owner.save(update_fields=[
-                "email", "role", "owner_approval_status", "email_verified_at",
+                "email", "role", "owner_approval_status",
                 "is_active", "first_name",
             ])
             owner.set_password("RoomFinder!2026")

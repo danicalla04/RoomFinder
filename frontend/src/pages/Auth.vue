@@ -39,9 +39,7 @@ async function submit() {
   try {
     if (register.value) {
       await api.post("auth/register/", form.value, { timeout: 120000 });
-      sessionStorage.setItem("rf_pending_email", form.value.email);
-      sessionStorage.setItem("rf_verify_resend_at", String(Date.now() + 60000));
-      await router.push("/verify-email");
+      await router.push({ path: "/login", query: { registered: "1" } });
       return;
     }
     await auth.login({
@@ -79,6 +77,9 @@ async function submit() {
       <img src="/hero.jpg" alt="A tropical hotel pool" />
       <p>
         Thoughtful places in Calapan City, Oriental Mindoro. Your exact room.
+      </p>
+      <p v-if="route.query.registered === '1' && !register" class="success" role="status">
+        Account created. You can now log in.
       </p>
     </div>
     <div class="auth-form">
@@ -159,7 +160,6 @@ async function submit() {
           >{{ register ? "Log in" : "Create an account" }}</RouterLink
         >
       </p>
-      <p class="auth-switch"><RouterLink to="/verify-email">Have a verification code? Enter it here</RouterLink></p>
       <p class="demo-note">Demo accounts: <strong>traveler</strong>, <strong>hotelowner</strong>, or <strong>administrator</strong><br />Password: RoomFinder!2026</p>
     </div>
   </section>

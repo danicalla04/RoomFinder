@@ -7,7 +7,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
 from django.db.models import Avg, Count
-from smtplib import SMTPException
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -23,8 +22,6 @@ from bookings.models import Booking
 from payments.models import Payment
 from reviews.models import Review
 from django.shortcuts import get_object_or_404
-from .email_verification import verify_code, resend_wait_seconds, send_verification
-from .serializers import EmailDeliveryUnavailable
 from accounts.permissions import IsAdmin
 
 logger = logging.getLogger(__name__)
@@ -74,61 +71,12 @@ class RoleTokenObtainPairView(TokenObtainPairView):
     serializer_class = RoleTokenObtainPairSerializer
 
 
-class VerifyEmailView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        email = request.data.get("email", "")
-        code = request.data.get("code", "")
-        if not isinstance(email, str) or not isinstance(code, str) or not email or not code:
-            return Response({"detail": "Enter your email and six-digit code."}, status=400)
-        with transaction.atomic():
-            user = verify_code(email, code)
-            if not user:
-                return Response({"detail": "This code is invalid or expired. Request another email if needed."}, status=400)
-        detail = (
-            "Email verified. Your hotel-owner request is awaiting administrator approval."
-            if not user.is_active
-            else "Email verified. You can now sign in."
-        )
-        return Response({"detail": detail, "can_sign_in": user.is_active})
-
-
-class ResendVerificationView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        email = request.data.get("email", "")
-        if not isinstance(email, str) or not email:
-            return Response({"email": ["Enter your email address."]}, status=400)
-        try:
-            with transaction.atomic():
-                user = User.objects.select_for_update().get(
-                    email__iexact=email.strip(), is_active=False, email_verified_at__isnull=True
-                )
-                wait = resend_wait_seconds(user)
-                if wait:
-                    return Response({"detail": f"Please wait {wait} seconds before requesting another email.", "retry_after": wait}, status=429)
-                send_verification(user)
-        except User.DoesNotExist:
-            pass
-        except (OSError, RuntimeError, SMTPException) as exc:
-            logger.error(
-                "Verification email resend failed: type=%s errno=%s smtp_code=%s",
-                type(exc).__name__,
-                getattr(exc, "errno", None),
-                getattr(exc, "smtp_code", None),
-            )
-            raise EmailDeliveryUnavailable() from exc
-        return Response({"detail": "If this account needs verification, a new email has been sent."})
-
-
 class AdminUsersView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
         users = User.objects.order_by("-date_joined", "-id").only(
-            "id", "username", "first_name", "last_name", "email", "phone", "role", "is_active", "email_verified_at",
+            "id", "username", "first_name", "last_name", "email", "phone", "role", "is_active",
             "owner_approval_status", "date_joined"
         )
         hotels_by_owner = {}
@@ -149,7 +97,6 @@ class AdminUsersView(APIView):
                 "phone": user.phone,
                 "role": user.role,
                 "is_active": user.is_active,
-                "email_verified": bool(user.email_verified_at),
                 "owner_approval_status": user.owner_approval_status if user.role == User.Role.OWNER else None,
                 "hotels": hotels_by_owner.get(user.id, []) if user.role == User.Role.OWNER else [],
                 "date_joined": user.date_joined,
@@ -171,7 +118,6 @@ class AdminUsersView(APIView):
             "phone": user.phone,
             "role": user.role,
             "is_active": user.is_active,
-            "email_verified": bool(user.email_verified_at),
             "owner_approval_status": user.owner_approval_status if user.role == User.Role.OWNER else None,
             "hotels": [],
             "date_joined": user.date_joined,
@@ -224,10 +170,8 @@ class ReviewOwnerView(APIView):
                 return Response({"detail": "Hotel owner not found."}, status=404)
             if owner.owner_approval_status == decision:
                 return Response({"detail": "This request already has that decision."}, status=400)
-            if decision == User.OwnerApproval.APPROVED and not owner.email_verified_at:
-                return Response({"detail": "The owner must verify their email first."}, status=400)
             owner.owner_approval_status = decision
-            owner.is_active = decision == User.OwnerApproval.APPROVED and bool(owner.email_verified_at)
+            owner.is_active = decision == User.OwnerApproval.APPROVED
             owner.save(update_fields=["owner_approval_status", "is_active"])
         return Response({"detail": "Owner request updated.", "status": owner.owner_approval_status})
 
