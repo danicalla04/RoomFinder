@@ -297,22 +297,82 @@ class GeospatialARActivity : AppCompatActivity() {
 
     private fun findTarget(latitude: Double, longitude: Double): RouteTarget? {
         if (route.size < 2) return null
-        val nearestIndex = route.indices.minByOrNull { index ->
-            distanceMeters(latitude, longitude, route[index].latitude, route[index].longitude)
-        } ?: return null
-        var targetIndex = nearestIndex
-        var distanceAhead = 0.0
-        while (targetIndex < route.lastIndex && distanceAhead < LOOK_AHEAD_METERS) {
-            val from = route[targetIndex]
-            val next = route[targetIndex + 1]
-            distanceAhead += distanceMeters(from.latitude, from.longitude, next.latitude, next.longitude)
-            targetIndex++
+        val metersPerLatitudeDegree = 111_320.0
+        val metersPerLongitudeDegree = metersPerLatitudeDegree * cos(Math.toRadians(latitude))
+        if (metersPerLongitudeDegree <= 0.0) return null
+
+        var nearestIndex = -1
+        var nearestFraction = 0.0
+        var nearestDistance = Double.POSITIVE_INFINITY
+        for (index in 0 until route.lastIndex) {
+            val start = route[index]
+            val end = route[index + 1]
+            val startX = (start.longitude - longitude) * metersPerLongitudeDegree
+            val startY = (start.latitude - latitude) * metersPerLatitudeDegree
+            val endX = (end.longitude - longitude) * metersPerLongitudeDegree
+            val endY = (end.latitude - latitude) * metersPerLatitudeDegree
+            val segmentX = endX - startX
+            val segmentY = endY - startY
+            val segmentLengthSquared = segmentX * segmentX + segmentY * segmentY
+            val fraction = if (segmentLengthSquared > 0.0) {
+                (-(startX * segmentX + startY * segmentY) / segmentLengthSquared).coerceIn(0.0, 1.0)
+            } else {
+                0.0
+            }
+            val closestX = startX + segmentX * fraction
+            val closestY = startY + segmentY * fraction
+            val distance = sqrt(closestX * closestX + closestY * closestY)
+            if (distance < nearestDistance) {
+                nearestDistance = distance
+                nearestIndex = index
+                nearestFraction = fraction
+            }
         }
-        if (targetIndex >= route.lastIndex) targetIndex = route.lastIndex - 1
-        if (targetIndex < 0) return null
-        val start = route[targetIndex]
-        val end = route[targetIndex + 1]
-        return RouteTarget(targetIndex, start, bearingDegrees(start, end))
+        if (nearestIndex < 0) return null
+
+        val segmentStart = route[nearestIndex]
+        val segmentEnd = route[nearestIndex + 1]
+        val projectedPoint = GeoPoint(
+            segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * nearestFraction,
+            segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * nearestFraction,
+        )
+
+        var directionStart = projectedPoint
+        var directionEnd = segmentEnd
+        if (nearestIndex + 2 < route.size &&
+            distanceMeters(
+                projectedPoint.latitude,
+                projectedPoint.longitude,
+                segmentEnd.latitude,
+                segmentEnd.longitude,
+            ) < ROUTE_TURN_SWITCH_DISTANCE_METERS
+        ) {
+            directionStart = segmentEnd
+            directionEnd = route[nearestIndex + 2]
+        }
+        val segmentDistance = distanceMeters(
+            directionStart.latitude,
+            directionStart.longitude,
+            directionEnd.latitude,
+            directionEnd.longitude,
+        )
+        if (segmentDistance < 0.1) return null
+        val anchorPoint = pointAlongSegment(
+            directionStart,
+            directionEnd,
+            minOf(AR_ANCHOR_LOOKAHEAD_METERS, segmentDistance),
+        )
+        return RouteTarget(nearestIndex, anchorPoint, bearingDegrees(directionStart, directionEnd))
+    }
+
+    private fun pointAlongSegment(from: GeoPoint, to: GeoPoint, distance: Double): GeoPoint {
+        val length = distanceMeters(from.latitude, from.longitude, to.latitude, to.longitude)
+        if (length <= 0.0) return to
+        val fraction = (distance / length).coerceIn(0.0, 1.0)
+        return GeoPoint(
+            from.longitude + (to.longitude - from.longitude) * fraction,
+            from.latitude + (to.latitude - from.latitude) * fraction,
+        )
     }
 
     private fun parseRoute(raw: String?): List<GeoPoint> {
@@ -431,7 +491,8 @@ class GeospatialARActivity : AppCompatActivity() {
         const val EXTRA_ROUTE_COORDINATES = "route_coordinates"
         const val EXTRA_HOTEL_NAME = "hotel_name"
         private const val PERMISSIONS_REQUEST = 441
-        private const val LOOK_AHEAD_METERS = 18.0
+        private const val ROUTE_TURN_SWITCH_DISTANCE_METERS = 2.0
+        private const val AR_ANCHOR_LOOKAHEAD_METERS = 6.0
         private const val ANCHOR_REPLACE_DISTANCE_METERS = 6.0
         private const val MIN_ROUTE_POINTS_BEFORE_REANCHOR = 5
         // Keep the flat arrow above street-level obstructions so it is visible
