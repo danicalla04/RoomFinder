@@ -256,8 +256,8 @@ onBeforeUnmount(() => {
       <div class="navigation-destination"><MapPin :size="18" /><span><strong>{{ hotel.name }}</strong><small>{{ hotel.address }}, {{ hotel.city }}</small></span></div>
       <p v-if="nextInstruction && state === 'ready'" class="navigation-instruction"><Navigation :size="17" />{{ nextInstruction }}</p>
       <p v-if="routeInfo && state === 'ready'" class="navigation-summary">{{ formatDistance(routeInfo.distance_meters) }} · about {{ Math.max(1, Math.round((routeInfo.duration_seconds || 0) / 60)) }} min walking</p>
-      <button v-if="routeInfo && state === 'ready' && isNativeApp" type="button" class="button navigation-ar-button" @click="openArGuidance"><LocateFixed :size="17" />Open world-anchored AR</button>
-      <p v-if="routeInfo && state === 'ready' && !isNativeApp" class="navigation-ar-note">World-anchored AR is available in the installed Android app.</p>
+      <button v-if="routeInfo && state === 'ready' && isNativeApp" type="button" class="button navigation-ar-button" @click="openArGuidance"><LocateFixed :size="17" />Open AR route arrow</button>
+      <p v-if="routeInfo && state === 'ready' && !isNativeApp" class="navigation-ar-note">The AR route arrow is available in the installed Android app.</p>
       <p v-if="arError" class="error" role="alert">{{ arError }}</p>
       <p v-if="message && state === 'error'" class="error" role="alert">{{ message }}</p>
       <RouterLink v-if="!auth.user" class="button" :to="{ path: '/login', query: { next: currentRoute.fullPath } }">Sign in for live directions</RouterLink>
