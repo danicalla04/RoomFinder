@@ -1,8 +1,12 @@
 package com.danicalla04.roomfinder.ar
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -14,6 +18,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import dev.romainguy.kotlin.math.Float3
 import com.google.ar.core.Anchor
 import com.google.ar.core.Config
 import com.google.ar.core.Session
@@ -35,6 +40,7 @@ class GeospatialARActivity : AppCompatActivity() {
 
     private lateinit var root: FrameLayout
     private lateinit var statusText: TextView
+    private lateinit var directionArrow: DirectionArrowView
     private lateinit var hotelName: String
     private lateinit var route: List<GeoPoint>
     private var arView: ARSceneView? = null
@@ -112,6 +118,8 @@ class GeospatialARActivity : AppCompatActivity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM,
         ).apply { setMargins(dp(16), 0, dp(16), dp(28)) })
+        directionArrow = DirectionArrowView(this).apply { visibility = View.GONE }
+        root.addView(directionArrow, FrameLayout.LayoutParams(dp(104), dp(104), Gravity.CENTER))
         setContentView(root)
     }
 
@@ -192,19 +200,36 @@ class GeospatialARActivity : AppCompatActivity() {
     private fun updateGeospatial(session: Session) {
         val earth = session.earth ?: return
         if (earth.trackingState != TrackingState.TRACKING) {
-            showStatus("Finding your position… move outdoors and scan the surrounding area.")
+            setArrowDirection(null)
+            val earthState = runCatching { earth.earthState.name }.getOrDefault("UNKNOWN")
+            val message = when (earthState) {
+                "ERROR_NOT_AUTHORIZED" -> "ARCore authorization failed. Check the ARCore API key, enabled API, package name, and debug SHA-1 restriction."
+                "ERROR_RESOURCE_EXHAUSTED" -> "ARCore API quota is exhausted for this Google Cloud project."
+                "ERROR_APK_VERSION_TOO_OLD" -> "Update Google Play Services for AR, then reopen RoomFinder."
+                "ERROR_GEOSPATIAL_MODE_DISABLED" -> "Geospatial mode is disabled or unsupported on this phone. Update Google Play Services for AR."
+                "ERROR_INTERNAL" -> "ARCore could not localize this session. Check the Android log for ARCore errors."
+                else -> "Waiting for precise GPS/VPS position. Turn on Location and internet, allow precise location, and slowly scan nearby buildings outdoors."
+            }
+            showStatus(message)
             return
         }
         val pose = runCatching { earth.cameraGeospatialPose }.getOrNull() ?: return
         if (pose.horizontalAccuracy > MAX_HORIZONTAL_ACCURACY_METERS ||
             pose.orientationYawAccuracy > MAX_HEADING_ACCURACY_DEGREES
         ) {
+            setArrowDirection(null)
             showStatus("Improving AR alignment… slowly move your phone to scan nearby buildings.")
             return
         }
 
-        val target = findTarget(pose.latitude, pose.longitude) ?: return
-        showStatus("AR location ready · follow the arrow toward $hotelName")
+        val target = findTarget(pose.latitude, pose.longitude) ?: run {
+            setArrowDirection(null)
+            return
+        }
+        @Suppress("DEPRECATION")
+        val cameraHeading = pose.heading
+        setArrowDirection(target.bearing - cameraHeading)
+        showStatus("Follow the red arrow toward $hotelName")
         if (pendingTargetIndex >= 0) return
         val lastPoint = lastAnchorPoint
         val reachedAnchor = lastPoint != null &&
@@ -227,11 +252,14 @@ class GeospatialARActivity : AppCompatActivity() {
                 runOnUiThread {
                     pendingTargetIndex = -1
                     if (state == Anchor.TerrainAnchorState.SUCCESS && anchor != null && !isFinishing) {
-                        attachArrow(anchor)
-                        lastTargetIndex = target.index
-                        lastAnchorPoint = target.point
+                        if (attachArrow(anchor)) {
+                            lastTargetIndex = target.index
+                            lastAnchorPoint = target.point
+                            showStatus("World marker placed · red arrow points toward $hotelName")
+                        }
                     } else {
-                        showStatus("Could not anchor the arrow here. Keep moving outdoors and try again.")
+                        anchor?.detach()
+                        showStatus("Red arrow shows the route; the world marker could not anchor here.")
                     }
                 }
             }
@@ -241,15 +269,18 @@ class GeospatialARActivity : AppCompatActivity() {
         }
     }
 
-    private fun attachArrow(anchor: Anchor) {
-        val view = arView ?: return
-        runCatching {
+    private fun attachArrow(anchor: Anchor): Boolean {
+        val view = arView ?: return false
+        return runCatching {
             arrowNode?.let { old ->
                 view.removeChildNode(old)
                 old.destroy()
             }
             val arrowModel = view.modelLoader.createModelInstance("models/arrow.glb")
             val modelNode = ModelNode(modelInstance = arrowModel, scaleToUnits = 2.4f).apply {
+                // The GLB is a flat arrow in the ground plane. Stand it upright
+                // so it is visible in the phone's forward-facing camera.
+                rotation = Float3(90f, 0f, 0f)
                 isTouchable = false
             }
             arrowNode = AnchorNode(engine = view.engine, anchor = anchor).apply {
@@ -257,10 +288,11 @@ class GeospatialARActivity : AppCompatActivity() {
                 addChildNode(modelNode)
             }
             view.addChildNode(arrowNode!!)
+            true
         }.onFailure {
             anchor.detach()
             showStatus("The AR arrow model could not be loaded.")
-        }
+        }.getOrDefault(false)
     }
 
     private fun findTarget(latitude: Double, longitude: Double): RouteTarget? {
@@ -330,12 +362,60 @@ class GeospatialARActivity : AppCompatActivity() {
         runOnUiThread { if (::statusText.isInitialized) statusText.text = value }
     }
 
+    private fun setArrowDirection(degrees: Double?) {
+        runOnUiThread {
+            if (!::directionArrow.isInitialized) return@runOnUiThread
+            if (degrees == null) {
+                directionArrow.visibility = View.GONE
+            } else {
+                directionArrow.setDirection(degrees)
+                directionArrow.visibility = View.VISIBLE
+            }
+        }
+    }
+
     private fun pillBackground(color: Int, radiusDp: Int) = GradientDrawable().apply {
         setColor(color)
         cornerRadius = dp(radiusDp).toFloat()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private class DirectionArrowView(context: Context) : View(context) {
+        private val shape = Path()
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(235, 42, 54)
+            style = Paint.Style.FILL
+        }
+        private val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 4f * resources.displayMetrics.density
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        fun setDirection(degrees: Double) {
+            rotation = (((degrees + 540.0) % 360.0) - 180.0).toFloat()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+            val size = minOf(width, height) * 0.78f
+            shape.reset()
+            shape.moveTo(cx, cy - size * 0.5f)
+            shape.lineTo(cx + size * 0.37f, cy - size * 0.04f)
+            shape.lineTo(cx + size * 0.15f, cy - size * 0.04f)
+            shape.lineTo(cx + size * 0.15f, cy + size * 0.43f)
+            shape.lineTo(cx - size * 0.15f, cy + size * 0.43f)
+            shape.lineTo(cx - size * 0.15f, cy - size * 0.04f)
+            shape.lineTo(cx - size * 0.37f, cy - size * 0.04f)
+            shape.close()
+            canvas.drawPath(shape, outline)
+            canvas.drawPath(shape, fill)
+        }
+    }
 
     override fun onDestroy() {
         arrowNode?.let { node ->
@@ -354,7 +434,9 @@ class GeospatialARActivity : AppCompatActivity() {
         private const val LOOK_AHEAD_METERS = 18.0
         private const val ANCHOR_REPLACE_DISTANCE_METERS = 6.0
         private const val MIN_ROUTE_POINTS_BEFORE_REANCHOR = 5
-        private const val ARROW_HEIGHT_ABOVE_GROUND = 0.12
+        // Keep the flat arrow above street-level obstructions so it is visible
+        // from the phone's forward-facing camera instead of sitting edge-on on the road.
+        private const val ARROW_HEIGHT_ABOVE_GROUND = 1.6
         private const val MAX_HORIZONTAL_ACCURACY_METERS = 10.0
         private const val MAX_HEADING_ACCURACY_DEGREES = 20.0
     }
